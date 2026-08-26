@@ -1,0 +1,4 @@
+/lnreadertui
+*.exe
+/data
+/dist
