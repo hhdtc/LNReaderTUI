@@ -45,11 +45,31 @@
 
 ## 安装与运行
 
-```bash
-# 构建（Go 1.22+）
-go build -o lnreadertui .
+**方式一：直接下载二进制**（无需安装 Go）
 
-# 运行
+从 [Releases](https://github.com/hhdtc/LNReaderTUI/releases) 下载对应平台的二进制即可：
+
+| 平台 | 文件 |
+|---|---|
+| Linux x64 | `lnreadertui-linux-amd64` |
+| Windows x64 | `lnreadertui-windows-amd64.exe` |
+| macOS Intel | `lnreadertui-darwin-amd64` |
+| macOS Apple Silicon | `lnreadertui-darwin-arm64` |
+
+```bash
+chmod +x lnreadertui-linux-amd64   # Linux/macOS 首次使用需赋予执行权限
+./lnreadertui
+```
+
+**方式二：从源码构建**（Go 1.22+）
+
+```bash
+go build -o lnreadertui .
+```
+
+运行：
+
+```bash
 ./lnreadertui
 
 # 批量导入（不启动界面）
