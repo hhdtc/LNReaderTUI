@@ -399,6 +399,9 @@ func (a *App) afterViewChange() {
 	a.resizeViews()
 	if a.view == viewSearch {
 		a.search.input.Focus()
+		// The input owns the keyboard again: hide the selection highlight
+		// until ↓ selects something.
+		a.search.syncDelegate()
 	}
 }
 

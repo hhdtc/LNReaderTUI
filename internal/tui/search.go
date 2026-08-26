@@ -212,7 +212,22 @@ func newSearchView(dl *site.Downloader) *searchView {
 	v.spinner = sp
 	v.list = list.New(nil, list.NewDefaultDelegate(), 80, 20)
 	v.list.Title = "Results"
+	v.syncDelegate()
 	return v
+}
+
+// syncDelegate makes the result-list highlight invisible while the query
+// input owns focus; the highlight only appears once ↓ moves focus to the
+// list (same rule as arriving from another tab).
+func (v *searchView) syncDelegate() {
+	d := list.NewDefaultDelegate()
+	if !v.input.Focused() {
+		v.list.SetDelegate(d)
+		return
+	}
+	d.Styles.SelectedTitle = d.Styles.NormalTitle
+	d.Styles.SelectedDesc = d.Styles.NormalDesc
+	v.list.SetDelegate(d)
 }
 
 func (v *searchView) resize(width, height int) {
@@ -260,6 +275,7 @@ func (v *searchView) openDetail(b site.Book) (*searchView, tea.Cmd) {
 	v.detail = &searchDetail{book: b, totalChapters: -1, loading: v.dl != nil}
 	v.detailDirty = true
 	v.input.Blur()
+	v.syncDelegate()
 	if v.dl == nil {
 		return v, nil
 	}
@@ -318,6 +334,8 @@ func (v *searchView) setResult(res *site.Result) {
 		items = append(items, searchItem{book: b})
 	}
 	v.list.SetItems(items)
+	v.list.Select(0)
+	v.syncDelegate()
 }
 
 func (v *searchView) setError(err error) {
@@ -392,14 +410,21 @@ func (v *searchView) Update(msg tea.Msg) (*searchView, tea.Cmd) {
 			return v, nil
 		case "down":
 			if v.input.Focused() {
-				// Blur to the result list (typeahead pattern).
+				// Blur to the result list (typeahead pattern). The list
+				// cursor restarts at the first item — like a fresh search.
 				v.input.Blur()
+				v.list.Select(0) // resets both cursor and paginator page
+				v.syncDelegate()
 				return v, nil
 			}
 		case "up":
-			// At the first result, up returns to the query input.
-			if !v.input.Focused() && v.list.Cursor() == 0 {
+			// At the very first result of the first page, up returns to the
+			// query input. Cursor() is page-relative, so the page matters:
+			// from page 2's first item, up must go to page 1's last item.
+			if !v.input.Focused() && v.list.Cursor() == 0 &&
+				v.list.Paginator.OnFirstPage() {
 				v.input.Focus()
+				v.syncDelegate()
 				return v, nil
 			}
 		case "esc":
@@ -409,6 +434,7 @@ func (v *searchView) Update(msg tea.Msg) (*searchView, tea.Cmd) {
 			}
 			if !v.input.Focused() {
 				v.input.Focus()
+				v.syncDelegate()
 				return v, nil
 			}
 			v.input.SetValue("")
