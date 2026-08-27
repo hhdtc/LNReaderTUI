@@ -70,9 +70,12 @@ brew install lnreadertui                # 安装预编译 bottle，无需 Go / X
 | macOS Apple Silicon | `lnreadertui-darwin-arm64` |
 
 ```bash
-chmod +x lnreadertui-linux-amd64   # Linux/macOS 首次使用需赋予执行权限
-./lnreadertui
+# 以 Linux x64 为例；Windows 直接运行 .exe，macOS 需先赋予执行权限（命令行或右键）
+chmod +x lnreadertui-linux-amd64
+./lnreadertui-linux-amd64
 ```
+
+可不带架构后缀：`mv lnreadertui-linux-amd64 lnreadertui && ./lnreadertui`。
 
 **方式二：从源码构建**（Go 1.22+）
 
