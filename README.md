@@ -49,8 +49,13 @@
 
 ```bash
 brew tap hhdtc/tap
-brew install lnreadertui
+brew trust hhdtc/tap                    # Homebrew 5.x+：信任第三方 tap（仅首次）
+brew install lnreadertui                # 安装预编译 bottle，无需 Go / Xcode
 ```
+
+升级：`brew update && brew upgrade lnreadertui`；卸载：`brew uninstall lnreadertui`。
+
+> Homebrew 5.x 起第三方 tap 需要显式信任（`brew trust hhdtc/tap`）。查看公式内容可先执行 `brew cat hhdtc/tap/lnreadertui`。
 
 **方式一：直接下载二进制**（无需安装 Go）
 
