@@ -54,13 +54,13 @@ jobs:
         if: matrix.goos == 'windows'
         run: |
           cd dist
-          cp lnreadertui-windows-amd64.exe lnreadertui.exe
+          cp lnreadertui-windows-${{ matrix.goarch }}.exe lnreadertui.exe
           python3 - <<'EOF'
           import zipfile, os
-          with zipfile.ZipFile('lnreadertui-windows-amd64.zip', 'w', zipfile.ZIP_DEFLATED) as z:
+          with zipfile.ZipFile('lnreadertui-windows-${{ matrix.goarch }}.zip', 'w', zipfile.ZIP_DEFLATED) as z:
               z.write('lnreadertui.exe')
           os.remove('lnreadertui.exe')
-          print('created lnreadertui-windows-amd64.zip')
+          print('created zip')
           EOF
 
       - name: Release
