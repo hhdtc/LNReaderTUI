@@ -17,8 +17,14 @@ jobs:
           - goos: linux
             goarch: amd64
             ext: ""
+          - goos: linux
+            goarch: arm64
+            ext: ""
           - goos: windows
             goarch: amd64
+            ext: ".exe"
+          - goos: windows
+            goarch: arm64
             ext: ".exe"
           - goos: darwin
             goarch: amd64
