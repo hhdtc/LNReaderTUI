@@ -63,7 +63,9 @@ brew install lnreadertui                # 安装预编译 bottle，无需 Go / X
 | 平台 | 文件 |
 |---|---|
 | Linux x64 | `lnreadertui-linux-amd64` |
-| Windows x64 | `lnreadertui-windows-amd64.exe` |
+| Linux ARM64 | `lnreadertui-linux-arm64` |
+| Windows x64 | `lnreadertui-windows-amd64.exe`（另有 `.zip`） |
+| Windows ARM64 | `lnreadertui-windows-arm64.exe`（另有 `.zip`） |
 | macOS Intel | `lnreadertui-darwin-amd64` |
 | macOS Apple Silicon | `lnreadertui-darwin-arm64` |
 
