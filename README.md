@@ -45,6 +45,13 @@
 
 ## 安装与运行
 
+**方式〇：Homebrew（macOS / Linux）**
+
+```bash
+brew tap hhdtc/tap
+brew install lnreadertui
+```
+
 **方式一：直接下载二进制**（无需安装 Go）
 
 从 [Releases](https://github.com/hhdtc/LNReaderTUI/releases) 下载对应平台的二进制即可：
