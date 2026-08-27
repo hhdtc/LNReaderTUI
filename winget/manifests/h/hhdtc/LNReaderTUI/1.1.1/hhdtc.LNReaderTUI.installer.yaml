@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.12.0.schema.json
+
+PackageIdentifier: hhdtc.LNReaderTUI
+PackageVersion: 1.1.1
+InstallerType: zip
+NestedInstallerType: portable
+NestedInstallerFiles:
+- RelativeFilePath: lnreadertui.exe
+  PortableCommandAlias: lnreadertui
+Installers:
+- Architecture: x64
+  InstallerUrl: https://github.com/hhdtc/LNReaderTUI/releases/download/v1.1.1/lnreadertui-windows-amd64.zip
+  InstallerSha256: PLACEHOLDER-REPLACE-AFTER-v1.1.1-RELEASE
+ManifestType: installer
+ManifestVersion: 1.12.0
