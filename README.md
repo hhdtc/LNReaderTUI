@@ -136,7 +136,8 @@ lnreadertui books list --json              # 验证已入库并查看进度
 
 | 视图 | 按键 |
 |---|---|
-| 全局 | `←/→` / `Tab` 切换标签页 · `1/2/3` 跳转 · `q` 退出 · `ctrl+c` 退出 · **鼠标支持**（点击标签页切换；滚动滚轮翻列表/详情；点击选中结果） |
+| 全局 | `←/→` / `Tab` 切换标签页 · `1/2/3` 跳转 · `q` 退出 · `ctrl+c` 退出 · **鼠标**：点击标签页切换；滚轮滚动列表/详情；点击列表项选中，**再次点击选中的项 = Enter**（打开书籍/详情/导入） |
+| 阅读器（鼠标） | **点击内容区左 1/3 = 上一页，右 1/3 = 下一页**（与 `←/→` 相同，含章节边界跳转）；滚轮逐行滚动 |
 | 书库 | `enter` 阅读 · `i` 导入 · `d` 删除 · `x` 重置进度 · `/` 过滤 |
 | 搜索 | 输入即搜 · `enter` 立即搜索 · `↓` 聚焦结果 · `enter` 打开详情 |
 | 详情 | `↑/↓ j/k pgup/pgdn` 滚动 · `enter` 下载 · `esc` 返回 |
@@ -145,13 +146,13 @@ lnreadertui books list --json              # 验证已入库并查看进度
 
 ## 数据存放
 
-| 平台 | 数据目录（`library.json` + `books/`） |
+| 平台 | 数据目录（`library.json` + 下载/导入的书籍 `books/`） |
 |---|---|
 | Linux | `~/.local/share/lnreadertui/`（尊重 `$XDG_DATA_HOME`） |
 | Windows | `%LOCALAPPDATA%\lnreadertui\` |
 | macOS | `~/.local/share/lnreadertui/` |
 
-下载的书籍会自动导入数据目录，删除书籍会删除对应文件。
+**默认文件位置**：下载完成的书籍会自动导入到上表 `books/` 目录（即最终存放位置，与手动导入一致）。下载过程中的暂存文件位于系统临时目录（Linux/macOS `/tmp/lnreadertui-downloads/`，Windows `%TEMP%\lnreadertui-downloads\`），完成后即复制入库；删除书籍（`d` / CLI `books delete`）会删除对应文件。自定义目录：`-data-dir <路径>`。
 
 ## 测试
 
