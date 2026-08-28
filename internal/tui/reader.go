@@ -178,29 +178,9 @@ func (v *readerView) Update(msg tea.Msg) (*readerView, tea.Cmd) {
 			// at the chapter edge they roll over to the next/previous
 			// chapter.
 			if m.String() == "right" || m.String() == "l" {
-				if v.vp.AtBottom() {
-					if v.chapter+1 < len(v.parsed.Chapters) {
-						_ = v.save()
-						v.gotoChapter(v.chapter+1, 0)
-						return v, v.saveCmd()
-					}
-					return v, nil
-				}
-				v.vp.PageDown()
-				return v, nil
+				return v.pageRight()
 			}
-			if v.vp.AtTop() {
-				if v.chapter > 0 {
-					_ = v.save()
-					// Left at the top lands on the previous chapter's last
-					// page (continuing backwards).
-					v.gotoChapter(v.chapter-1, 1)
-					return v, v.saveCmd()
-				}
-				return v, nil
-			}
-			v.vp.PageUp()
-			return v, nil
+			return v.pageLeft()
 		case "n", "p":
 			next := v.chapter
 			if m.String() == "n" {
@@ -227,10 +207,54 @@ func (v *readerView) Update(msg tea.Msg) (*readerView, tea.Cmd) {
 			v.vp.GotoBottom()
 			return v, nil
 		}
+	case tea.MouseMsg:
+		// Click the content area: left third pages back, right third pages
+		// forward (same as the arrow keys, with chapter roll-over).
+		if m.Action == tea.MouseActionPress && m.Button == tea.MouseButtonLeft {
+			if m.Y >= 2 && m.Y < v.height-2 && v.width > 2 {
+				third := v.width / 3
+				switch {
+				case m.X < third:
+					return v.pageLeft()
+				case m.X >= 2*third:
+					return v.pageRight()
+				}
+			}
+			return v, nil // middle third / outside content: ignore
+		}
 	}
 	var cmd tea.Cmd
 	v.vp, cmd = v.vp.Update(msg)
 	return v, cmd
+}
+
+// pageRight flips one page forward (rolls to the next chapter at the bottom).
+func (v *readerView) pageRight() (*readerView, tea.Cmd) {
+	if v.vp.AtBottom() {
+		if v.chapter+1 < len(v.parsed.Chapters) {
+			_ = v.save()
+			v.gotoChapter(v.chapter+1, 0)
+			return v, v.saveCmd()
+		}
+		return v, nil
+	}
+	v.vp.PageDown()
+	return v, nil
+}
+
+// pageLeft flips one page back (rolls to the previous chapter's last page at
+// the top).
+func (v *readerView) pageLeft() (*readerView, tea.Cmd) {
+	if v.vp.AtTop() {
+		if v.chapter > 0 {
+			_ = v.save()
+			v.gotoChapter(v.chapter-1, 1)
+			return v, v.saveCmd()
+		}
+		return v, nil
+	}
+	v.vp.PageUp()
+	return v, nil
 }
 
 func (v *readerView) View() string {

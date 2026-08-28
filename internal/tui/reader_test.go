@@ -274,3 +274,50 @@ func TestReaderHLPageKeys(t *testing.T) {
 		t.Fatalf("l at bottom: chapter %d, want 1", v.chapter)
 	}
 }
+
+// Clicking the reader content: right third pages forward (with chapter
+// roll-over), left third pages back; middle third does nothing.
+func TestReaderClickThirdsPage(t *testing.T) {
+	store, b, parsed := testBook(t, 2)
+	v := newReaderView(b, parsed, store)
+	v.resize(120, 40)
+	_ = v.openChapter(0, 0)
+
+	// Middle third: no movement.
+	v, _ = v.Update(tea.MouseMsg{X: 60, Y: 20, Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress})
+	if v.chapter != 0 || v.vp.YOffset != 0 {
+		t.Fatalf("middle click changed position: ch=%d off=%d", v.chapter, v.vp.YOffset)
+	}
+
+	// Right third: page down (offset grows).
+	v, _ = v.Update(tea.MouseMsg{X: 100, Y: 20, Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress})
+	if v.chapter != 0 || v.vp.YOffset == 0 {
+		t.Fatalf("right click did not page: ch=%d off=%d", v.chapter, v.vp.YOffset)
+	}
+
+	// Left third: page back up.
+	v, _ = v.Update(tea.MouseMsg{X: 20, Y: 20, Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress})
+	if v.vp.YOffset != 0 {
+		t.Fatalf("left click did not page back: off=%d", v.vp.YOffset)
+	}
+
+	// Left third at the top rolls to the previous chapter boundary (stays
+	// on chapter 0, clamped).
+	v, _ = v.Update(tea.MouseMsg{X: 20, Y: 20, Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress})
+	if v.chapter != 0 {
+		t.Fatalf("left at top should clamp: ch=%d", v.chapter)
+	}
+
+	// Right third rolls to the next chapter at the bottom.
+	v.vp.GotoBottom()
+	v, cmd := v.Update(tea.MouseMsg{X: 100, Y: 20, Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress})
+	if v.chapter != 1 {
+		t.Fatalf("right at bottom should roll: ch=%d", v.chapter)
+	}
+	_ = cmd
+}
