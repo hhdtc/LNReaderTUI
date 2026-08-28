@@ -105,7 +105,14 @@ func (v *libraryView) Update(msg tea.Msg) (*libraryView, tea.Cmd) {
 		// list title(1) + blank(1) + status bar(1) + blank(1) = first item
 		// at row 5; each item is title + description + spacing = 3 rows.
 		const libTopRow = 5
-		if mouseList(m, &v.list, libTopRow, func(int) int { return 3 }) {
+		prev := v.list.Paginator.Page*v.list.Paginator.PerPage + v.list.Cursor()
+		if idx := mouseList(m, &v.list, libTopRow, func(int) int { return 3 }); idx >= 0 {
+			// Clicking the already-selected item acts like Enter.
+			if idx == prev {
+				if b := v.selected(); b != nil {
+					return v, func() tea.Msg { return openBookMsg{book: b} }
+				}
+			}
 			return v, nil
 		}
 		return v, nil

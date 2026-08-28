@@ -268,3 +268,63 @@ func TestMouseListClickSelects(t *testing.T) {
 		t.Fatal("cursor went negative")
 	}
 }
+
+// Clicking the already-selected search result opens the detail (like Enter).
+func TestClickSelectedOpensDetail(t *testing.T) {
+	f := &fakeSearch{results: map[string]*site.Result{
+		"苍穹": {Total: 2, Books: []site.Book{
+			{Title: "苍穹女武神", URL: "https://www.bilinovel.com/novel/1.html"},
+			{Title: "苍穹之战神", URL: "https://www.bilinovel.com/novel/2.html"},
+		}},
+	}}
+	a := searchViewTestApp(t, f)
+	a = drain(a, keyRunes("苍穹"))
+	a = drain(a, typeaheadTickMsg{})
+	// The first result is pre-selected, so the first click acts like Enter.
+	a = drain(a, tea.MouseMsg{X: 10, Y: 8, Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress})
+	if a.search.detail == nil {
+		t.Fatal("click on the selected item did not open detail")
+	}
+	if a.search.detail.book.Title != "苍穹女武神" {
+		t.Fatalf("detail = %q", a.search.detail.book.Title)
+	}
+
+	// Back to results; click item2 once (selects), then again (opens).
+	a = drain(a, keyArrow(tea.KeyEsc))
+	a.search.detail = nil
+	a.search.input.Focus()
+	a = drain(a, tea.MouseMsg{X: 10, Y: 11, Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress})
+	if a.search.detail != nil {
+		t.Fatal("first click on unselected item should only select")
+	}
+	if a.search.list.Cursor() != 1 {
+		t.Fatalf("cursor = %d, want 1", a.search.list.Cursor())
+	}
+	a = drain(a, tea.MouseMsg{X: 10, Y: 11, Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress})
+	if a.search.detail == nil || a.search.detail.book.Title != "苍穹之战神" {
+		t.Fatalf("second click should open detail for item2: %+v", a.search.detail)
+	}
+}
+
+// Clicking the already-selected library book opens the reader.
+func TestClickSelectedOpensBook(t *testing.T) {
+	store, b, parsed := testBook(t, 2)
+	lib := newLibraryView(store)
+	lib.resize(120, 40)
+	_ = b
+	_ = parsed
+	// First click selects the single item; second click opens it.
+	lib, _ = lib.Update(tea.MouseMsg{X: 10, Y: 5, Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress})
+	_, cmd := lib.Update(tea.MouseMsg{X: 10, Y: 5, Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress})
+	if cmd == nil {
+		t.Fatal("second click did not open the book")
+	}
+	if msg := cmd().(openBookMsg); msg.book.ID == "" {
+		t.Fatalf("openBookMsg without book: %+v", msg)
+	}
+}

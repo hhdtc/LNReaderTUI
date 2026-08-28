@@ -120,22 +120,25 @@ func max(a, b int) int {
 // have variable heights (wrapped descriptions), so itemLines reports the
 // rendered row count for an item index; clicks walk the cumulative heights.
 // Returns true when the message was consumed.
+// mouseList implements click-to-select and wheel for a bubbles list.
+// topRow is the 0-based row where items begin; each item is itemLines rows.
+// Returns the selected item index, or -1 when the message was not consumed.
 func mouseList(msg tea.MouseMsg, m *list.Model, topRow int,
-	itemLines func(idx int) int) bool {
+	itemLines func(idx int) int) int {
 	if msg.Action != tea.MouseActionPress {
-		return false
+		return -1
 	}
 	if msg.Button == tea.MouseButtonWheelUp {
 		if m.Cursor() > 0 || !m.Paginator.OnFirstPage() {
 			m.CursorUp()
 		}
-		return true
+		return -1
 	}
 	if msg.Button == tea.MouseButtonWheelDown {
 		if m.Cursor() < m.Paginator.PerPage-1 || !m.Paginator.OnLastPage() {
 			m.CursorDown()
 		}
-		return true
+		return -1
 	}
 	if msg.Button == tea.MouseButtonLeft && msg.Y >= topRow {
 		y := msg.Y - topRow
@@ -145,14 +148,15 @@ func mouseList(msg tea.MouseMsg, m *list.Model, topRow int,
 			h := max(itemLines(i), 1)
 			if y < h {
 				m.Select(i)
-				return true
+				return i
 			}
 			y -= h
 		}
 		if total > 0 {
-			m.Select(total - 1)
+			last := total - 1
+			m.Select(last)
+			return last
 		}
-		return true
 	}
-	return false
+	return -1
 }

@@ -245,7 +245,13 @@ func (v *jobsView) Update(msg tea.Msg) (*jobsView, tea.Cmd) {
 		if m.Y == 0 {
 			return v, nil
 		}
-		if mouseList(m, &v.list, 5, func(int) int { return 3 }) {
+		prev := v.list.Paginator.Page*v.list.Paginator.PerPage + v.list.Cursor()
+		if idx := mouseList(m, &v.list, 5, func(int) int { return 3 }); idx >= 0 {
+			if idx == prev && idx < len(v.items) {
+				if j := v.items[idx]; j.status == statusDone && !j.imported {
+					return v, v.importJob(j)
+				}
+			}
 			return v, nil
 		}
 		return v, nil

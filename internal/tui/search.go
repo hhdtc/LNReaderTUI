@@ -379,7 +379,14 @@ func (v *searchView) Update(msg tea.Msg) (*searchView, tea.Cmd) {
 		// "Results"(1) + blank(1) + "N items"(1) + blank(1) = first item at
 		// row 8; each item is title + description + spacing = 3 rows.
 		const searchTopRow = 8
-		if mouseList(m, &v.list, searchTopRow, func(int) int { return 3 }) {
+		prev := v.list.Paginator.Page*v.list.Paginator.PerPage + v.list.Cursor()
+		if idx := mouseList(m, &v.list, searchTopRow, func(int) int { return 3 }); idx >= 0 {
+			// Clicking the already-selected result acts like Enter (detail).
+			if idx == prev && idx < len(v.list.Items()) {
+				if it, ok := v.list.Items()[idx].(searchItem); ok {
+					return v.openDetail(it.book)
+				}
+			}
 			return v, nil
 		}
 		return v, nil
