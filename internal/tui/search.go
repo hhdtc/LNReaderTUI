@@ -103,7 +103,7 @@ func (v *searchView) detailView(width, height int) string {
 		v.detailBuiltW = v.detailVp.Width
 	}
 	header := titleStyle.Render("Book detail") + "  " +
-		dimmed("↑/↓ j/k: scroll · enter: download · esc: back")
+		dimmed("↑/↓ j/k: scroll · enter: download · u: update existing · esc: back")
 	// Reserve header, blank and footer rows; the viewport must not push the
 	// footer off-screen.
 	body := limitLines(v.detailVp.View(), max(height-3, 1))
@@ -112,6 +112,7 @@ func (v *searchView) detailView(width, height int) string {
 		Background(lipgloss.Color("78")).
 		Padding(0, 1).
 		Render("Enter: download") + "  " +
+		renderKeyHint("u: update existing") + "  " +
 		dimmed("Esc: back to list")
 	return lipgloss.JoinVertical(lipgloss.Left, header, body, "", footer)
 }
@@ -396,6 +397,11 @@ func (v *searchView) Update(msg tea.Msg) (*searchView, tea.Cmd) {
 			switch m.String() {
 			case "enter":
 				return v, func() tea.Msg { return startDownloadMsg{book: v.detail.book} }
+			case "u":
+				return v, func() tea.Msg {
+					return startUpdateMsg{novelID: site.SearchNovelID(v.detail.book.URL),
+						srcURL: v.detail.book.URL, title: v.detail.book.Title}
+				}
 			case "esc", "q":
 				v.detail = nil
 				return v, nil
@@ -459,6 +465,28 @@ func (v *searchView) Update(msg tea.Msg) (*searchView, tea.Cmd) {
 				v.syncDelegate()
 				return v, nil
 			}
+		case "u":
+			if v.input.Focused() {
+				// The query input owns the letter: type it, don't act.
+				var cmd tea.Cmd
+				v.input, cmd = v.input.Update(msg)
+				q := v.input.Value()
+				if q != v.lastValue {
+					v.lastValue = q
+					return v, tea.Batch(v.onChange(q), cmd)
+				}
+				return v, cmd
+			}
+			if v.state != searchResults {
+				return v, nil
+			}
+			if item, ok := v.list.SelectedItem().(searchItem); ok {
+				return v, func() tea.Msg {
+					return startUpdateMsg{novelID: site.SearchNovelID(item.book.URL),
+						srcURL: item.book.URL, title: item.book.Title}
+				}
+			}
+			return v, nil
 		case "esc":
 			if v.detail != nil {
 				v.detail = nil

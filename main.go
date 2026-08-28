@@ -128,6 +128,16 @@ func main() {
 		}
 		runBooks(store, sub, key, *asJSON)
 
+	case "update":
+		cmd := flag.NewFlagSet("update", flag.ExitOnError)
+		asJSON := cmd.Bool("json", false, "print JSON instead of readable text")
+		_ = cmd.Parse(reorderMixedFlags(cmd, args[1:]))
+		key := strings.Join(cmd.Args(), " ")
+		if key == "" {
+			fatal(fmt.Errorf("usage: lnreadertui update <id|title> [--json]"))
+		}
+		runUpdate(store, key, *asJSON)
+
 	case "import":
 		cmd := flag.NewFlagSet("import", flag.ExitOnError)
 		asJSON := cmd.Bool("json", false, "print JSON instead of readable text")
@@ -207,6 +217,7 @@ func usage() {
   lnreadertui books show <id|title>       show one local book
   lnreadertui books delete <id|title>     delete a local book (+file)
   lnreadertui books reset <id|title>      reset reading progress
+  lnreadertui update <id|title> [--json]  append newly published chapters of a downloaded book
   lnreadertui import <path...> [--json]   import .epub/.txt files or directories
 
 Flags:
@@ -514,6 +525,47 @@ func findBook(store *model.Store, key string) (*model.Book, error) {
 		}
 	}
 	return nil, fmt.Errorf("no book matching %q", key)
+}
+
+// ---------- update ----------
+
+func runUpdate(store *model.Store, key string, asJSON bool) {
+	b, err := findBook(store, key)
+	if err != nil {
+		fatal(err)
+	}
+	if b.SourceID == "" {
+		fatal(fmt.Errorf("%q has no online source; only downloaded books can be updated", b.Title))
+	}
+	ctx := ctxWithInterrupt()
+	dl, err := site.NewDownloader()
+	if err != nil {
+		fatal(err)
+	}
+	res, err := pipeline.UpdateNovel(ctx, dl, b.SourceID, store.FilePath(b),
+		func(p pipeline.Progress) { progressLine(&p) })
+	if err != nil {
+		fatal(err)
+	}
+	if err := store.UpdateBookIndex(b.ID, res.NewTotal, "", ""); err != nil {
+		fatal(err)
+	}
+	if asJSON {
+		printJSON(struct {
+			Title   string `json:"title"`
+			ID      string `json:"id"`
+			Added   int    `json:"addedChapters"`
+			Total   int    `json:"totalChapters"`
+			SavedTo string `json:"savedTo"`
+		}{b.Title, b.ID, len(res.AddedChapters), res.NewTotal, store.FilePath(b)})
+		return
+	}
+	if len(res.AddedChapters) == 0 {
+		fmt.Printf("%s is up to date (%d chapters)\n", b.Title, res.NewTotal)
+		return
+	}
+	fmt.Printf("updated %s: +%d new chapters (%d total)\n",
+		b.Title, len(res.AddedChapters), res.NewTotal)
 }
 
 // ---------- import ----------

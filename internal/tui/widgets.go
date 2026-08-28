@@ -35,7 +35,16 @@ var (
 
 	progressBar = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("78"))
+
+	keyHint = lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("245"))
 )
+
+// renderKeyHint renders a muted key hint for footers.
+func renderKeyHint(s string) string {
+	return keyHint.Render(s)
+}
 
 // wrapWidth wraps text to the given display width, honoring CJK wide runes.
 func wrapWidth(text string, width int) []string {

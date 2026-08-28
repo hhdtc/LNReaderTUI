@@ -50,8 +50,9 @@ type containerDoc struct {
 
 type opfDoc struct {
 	Metadata struct {
-		Title   string `xml:"http://purl.org/dc/elements/1.1/ title"`
-		Creator string `xml:"http://purl.org/dc/elements/1.1/ creator"`
+		Identifier string `xml:"http://purl.org/dc/elements/1.1/ identifier"`
+		Title      string `xml:"http://purl.org/dc/elements/1.1/ title"`
+		Creator    string `xml:"http://purl.org/dc/elements/1.1/ creator"`
 	} `xml:"metadata"`
 	Manifest struct {
 		Items []struct {

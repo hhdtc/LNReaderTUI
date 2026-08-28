@@ -78,6 +78,9 @@ func Write(outPath string, b Bundle) error {
 		return err
 	}
 
+	meta := manifestMeta{ID: b.ID, Title: b.Title, Author: b.Author,
+		Modified: time.Now().UTC().Format("2006-01-02T15:04:05Z")}
+
 	// ---- image registry: src -> (file name, media type) ----
 	imageMap := map[string]imageEntry{}
 	var imageOrder []string
@@ -98,10 +101,9 @@ func Write(outPath string, b Bundle) error {
 		if err := writeZipBytes(zw, "OEBPS/"+imageMap[src].name, img.Data); err != nil {
 			return err
 		}
+		meta.items = append(meta.items, manifestItem{
+			"img_" + imageMap[src].name, imageMap[src].name, imageMap[src].media, ""})
 	}
-
-	meta := manifestMeta{ID: b.ID, Title: b.Title, Author: b.Author,
-		Modified: time.Now().UTC().Format("2006-01-02T15:04:05Z")}
 
 	if len(b.Cover) > 0 {
 		if err := writeZipBytes(zw, "OEBPS/images/cover"+coverExt, b.Cover); err != nil {

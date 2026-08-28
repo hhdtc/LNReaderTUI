@@ -264,3 +264,41 @@ func TestRuneBurstSplits(t *testing.T) {
 		t.Fatalf("burst in search input: %q", a.search.input.Value())
 	}
 }
+
+// 'u' while the library filter is open must type into the filter, not start
+// an update.
+func TestLibraryUpdateKeyTypingInFilter(t *testing.T) {
+	a := newTestApp(t)
+	a = update(t, a, keyRunes("/"))
+	a = update(t, a, keyRunes("u"))
+	if !a.library.filtering {
+		t.Fatal("'/' should have opened the filter")
+	}
+	if a.library.filter.Value() != "u" {
+		t.Fatalf("'u' swallowed by update key: filter=%q", a.library.filter.Value())
+	}
+	if a.status != "" {
+		t.Fatalf("unexpected status flash: %q", a.status)
+	}
+}
+
+// 'u' on an imported book (no online source) flashes an explanatory status
+// instead of starting a job.
+func TestLibraryUpdateImportedBookFlash(t *testing.T) {
+	store, _, _ := testBook(t, 3)
+	a := New(store, nil, t.TempDir())
+	m, _ := a.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	a = m.(*App)
+	m, cmd := a.Update(keyRunes("u"))
+	a = m.(*App)
+	if cmd == nil {
+		t.Fatal("no command returned for 'u' on imported book")
+	}
+	if msg := cmd(); msg != nil {
+		m, _ := a.Update(msg)
+		a = m.(*App)
+	}
+	if !strings.Contains(a.status, "imported") {
+		t.Fatalf("expected imported flash, got: %q", a.status)
+	}
+}

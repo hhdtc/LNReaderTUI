@@ -99,6 +99,43 @@ func (s *Store) Find(id string) *Book {
 	return nil
 }
 
+// FindBySource locates a downloaded book by its bilinovel novel id.
+func (s *Store) FindBySource(novelID string) *Book {
+	if novelID == "" {
+		return nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, b := range s.books {
+		if b.SourceID == novelID {
+			return b
+		}
+	}
+	return nil
+}
+
+// UpdateBookIndex refreshes the index entry after an in-place append-style
+// update (new chapter count; metadata refreshed when non-empty).
+func (s *Store) UpdateBookIndex(id string, chapters int, title, author string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, b := range s.books {
+		if b.ID == id {
+			if chapters >= 0 {
+				b.Chapters = chapters
+			}
+			if title != "" {
+				b.Title = title
+			}
+			if author != "" {
+				b.Author = author
+			}
+			return s.saveLocked()
+		}
+	}
+	return fmt.Errorf("book not found: %s", id)
+}
+
 func (s *Store) saveLocked() error {
 	data, err := json.MarshalIndent(struct {
 		Books []*Book `json:"books"`
@@ -253,29 +290,38 @@ func (s *Store) ResetProgress(id string) error {
 }
 
 // RegisterDownloaded adds an EPUB that was downloaded and already written
-// to srcPath (kept in place; not copied again).
+// to srcPath (kept in place; not copied again). The library copy is named
+// <title>-<novelID>.<ext>. Re-downloading the same novel replaces the
+// existing entry in place: id and reading progress are preserved.
 func (s *Store) RegisterDownloaded(srcPath, title, author, novelID, srcURL string, totalChapters int) (*Book, error) {
-	id := newID()
 	ext := strings.ToLower(filepath.Ext(srcPath))
-	finalPath := filepath.Join("books", id+ext)
-	if err := copyFile(srcPath, filepath.Join(s.dataDir, finalPath)); err != nil {
+	name := safeFileName(title)
+	if novelID != "" {
+		name += "-" + novelID
+	} else {
+		name += "-" + newID()
+	}
+	if name == "" {
+		name = newID()
+	}
+	finalPath := filepath.Join("books", name+ext)
+	dst := filepath.Join(s.dataDir, finalPath)
+	if err := copyFile(srcPath, dst); err != nil {
 		return nil, err
 	}
 	b := &Book{
-		ID:        id,
 		Title:     title,
 		Author:    author,
 		File:      finalPath,
 		FileType:  strings.TrimPrefix(ext, "."),
 		Chapters:  totalChapters,
-		AddedAt:   time.Now().UTC().Format(time.RFC3339),
 		SourceID:  novelID,
 		SourceURL: srcURL,
 	}
 	// Parse once (from the destination) so metadata/title/chapter count
 	// match the actual file; prefer the downloaded metadata when parsing
 	// yields nothing better.
-	if parsed, err := epub.ReadFile(filepath.Join(s.dataDir, finalPath)); err == nil {
+	if parsed, err := epub.ReadFile(dst); err == nil {
 		if parsed.Title != "" {
 			b.Title = parsed.Title
 		}
@@ -286,13 +332,56 @@ func (s *Store) RegisterDownloaded(srcPath, title, author, novelID, srcURL strin
 			b.Chapters = len(parsed.Chapters)
 		}
 	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// Re-downloaded: swap the file + metadata in place, preserving the id
+	// and reading progress of the original entry.
+	if novelID != "" {
+		for _, existing := range s.books {
+			if existing.SourceID != "" && existing.SourceID == novelID {
+				oldFile := existing.File
+				existing.Title = b.Title
+				existing.Author = b.Author
+				existing.File = b.File
+				existing.FileType = b.FileType
+				existing.Chapters = b.Chapters
+				existing.SourceURL = srcURL
+				if err := s.saveLocked(); err != nil {
+					return nil, err
+				}
+				if oldFile != existing.File {
+					_ = os.Remove(filepath.Join(s.dataDir, oldFile))
+				}
+				return existing, nil
+			}
+		}
+	}
+	b.ID = newID()
+	b.AddedAt = time.Now().UTC().Format(time.RFC3339)
 	s.books = append(s.books, b)
 	if err := s.saveLocked(); err != nil {
 		return nil, err
 	}
 	return b, nil
+}
+
+// safeFileName makes a book title safe as a file name (strip path/illegal
+// characters, collapse whitespace, cap length).
+func safeFileName(title string) string {
+	s := strings.TrimSpace(title)
+	if s == "" {
+		return ""
+	}
+	repl := strings.NewReplacer(
+		"/", "_", "\\", "_", ":", "_", "*", "_", "?", "_",
+		"\"", "_", "<", "_", ">", "_", "|", "_", "\n", " ", "\r", " ",
+	)
+	s = strings.Join(strings.Fields(repl.Replace(s)), " ")
+	if r := []rune(s); len(r) > 80 {
+		s = string(r[:80])
+	}
+	return strings.TrimSpace(s)
 }
 
 func copyFile(src, dst string) error {

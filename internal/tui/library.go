@@ -122,6 +122,25 @@ func (v *libraryView) Update(msg tea.Msg) (*libraryView, tea.Cmd) {
 			v.filtering = true
 			v.filter.Focus()
 			return v, nil
+		case "u":
+			if v.filtering {
+				// The filter input owns the letter: type it, don't act.
+				var cmd tea.Cmd
+				v.filter, cmd = v.filter.Update(msg)
+				return v, cmd
+			}
+			b := v.selected()
+			if b == nil {
+				return v, nil
+			}
+			if b.SourceID == "" {
+				return v, func() tea.Msg {
+					return statusFlashMsg{text: b.Title + " was imported, not downloaded — nothing to update"}
+				}
+			}
+			return v, func() tea.Msg {
+				return startUpdateMsg{novelID: b.SourceID, srcURL: b.SourceURL, title: b.Title}
+			}
 		case "esc":
 			if v.filtering {
 				v.filtering = false

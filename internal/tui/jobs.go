@@ -26,14 +26,24 @@ const (
 	statusStopped jobStatus = "cancelled"
 )
 
+type jobKind int
+
+const (
+	jobDownload jobKind = iota
+	jobUpdate
+)
+
 type job struct {
 	id       string
+	kind     jobKind
 	novelID  string
 	srcURL   string
 	title    string
+	bookID   string
 	status   jobStatus
 	done     int
 	total    int
+	added    int
 	cur      string
 	volume   string
 	err      string
@@ -78,6 +88,12 @@ func (i jobItem) Description() string {
 		}
 		return "starting…"
 	case statusDone:
+		if j.kind == jobUpdate {
+			if j.added > 0 {
+				return fmt.Sprintf("updated — +%d chapters (%d total)", j.added, j.total)
+			}
+			return "up to date"
+		}
 		if j.imported {
 			return "imported into library"
 		}
@@ -148,6 +164,49 @@ func (v *jobsView) refresh() {
 	v.list.SetItems(items)
 }
 
+// startUpdate launches an append-style update job for an existing book.
+func (v *jobsView) startUpdate(book *model.Book, dl *site.Downloader) {
+	if book.SourceID == "" {
+		j := &job{id: nextJobID(&v.seq), title: book.Title, status: statusFailed,
+			err: "book has no online source"}
+		v.items = append(v.items, j)
+		v.refresh()
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	j := &job{
+		id:      nextJobID(&v.seq),
+		kind:    jobUpdate,
+		novelID: book.SourceID,
+		srcURL:  book.SourceURL,
+		title:   book.Title,
+		bookID:  book.ID,
+		status:  statusRunning,
+		cancel:  cancel,
+	}
+	v.items = append(v.items, j)
+	v.refresh()
+
+	path := v.store.FilePath(book)
+	events := v.events
+	go func() {
+		res, err := pipeline.UpdateNovel(ctx, dl, j.novelID, path,
+			func(p pipeline.Progress) {
+				postJobEvent(ctx, events, jobProgressMsg{
+					id: j.id, kind: jobUpdate, done: p.Done, total: p.Total,
+					title: p.Title, volume: p.Volume})
+			})
+		if err != nil {
+			postJobEvent(ctx, events, jobProgressMsg{
+				id: j.id, kind: jobUpdate, finished: true, bookID: j.bookID, err: err})
+			return
+		}
+		postJobEvent(ctx, events, jobProgressMsg{
+			id: j.id, kind: jobUpdate, finished: true, bookID: j.bookID,
+			added: len(res.AddedChapters), total: res.NewTotal})
+	}()
+}
+
 // start creates and launches a download job for a search result.
 func (v *jobsView) start(b site.Book, dl *site.Downloader) {
 	novelID := site.SearchNovelID(b.URL)
@@ -214,6 +273,12 @@ func (v *jobsView) apply(m jobProgressMsg) tea.Cmd {
 		} else {
 			j.status = statusDone
 		}
+		if m.kind == jobUpdate && m.err == nil {
+			j.added = m.added
+			j.total = m.total
+			v.refresh()
+			return v.applyUpdate(j)
+		}
 		v.refresh()
 		// Auto-import: a completed download belongs in the library without
 		// requiring a manual Enter.
@@ -236,6 +301,16 @@ func (v *jobsView) markImported(id string) {
 	if j := v.find(id); j != nil {
 		j.imported = true
 		v.refresh()
+	}
+}
+
+// applyUpdate refreshes the library index after an append-style update.
+func (v *jobsView) applyUpdate(j *job) tea.Cmd {
+	return func() tea.Msg {
+		if err := v.store.UpdateBookIndex(j.bookID, j.total, "", ""); err != nil {
+			return updateDoneMsg{id: j.id, title: j.title, err: err}
+		}
+		return updateDoneMsg{id: j.id, title: j.title, added: j.added, total: j.total}
 	}
 }
 

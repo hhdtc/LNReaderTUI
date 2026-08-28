@@ -77,6 +77,7 @@ type searchResultMsg struct {
 // jobProgressMsg reports download progress or completion.
 type jobProgressMsg struct {
 	id         string
+	kind       jobKind
 	done       int
 	total      int
 	title      string
@@ -84,6 +85,8 @@ type jobProgressMsg struct {
 	finished   bool
 	err        error
 	bundlePath string
+	added      int
+	bookID     string
 }
 
 // importDoneMsg reports the outcome of an async path import.
@@ -120,6 +123,25 @@ type importPathMsg struct{ path string }
 
 // startDownloadMsg starts a download job from a search result.
 type startDownloadMsg struct{ book site.Book }
+
+// startUpdateMsg requests an update of an existing library book by source.
+type startUpdateMsg struct {
+	novelID string
+	srcURL  string
+	title   string
+}
+
+// updateDoneMsg reports a finished append-style update.
+type updateDoneMsg struct {
+	id    string
+	title string
+	added int
+	total int
+	err   error
+}
+
+// statusFlashMsg shows a transient status line (no state change).
+type statusFlashMsg struct{ text string }
 
 // exitReaderMsg asks the root to close the reader (saving progress).
 type exitReaderMsg struct{}
@@ -248,6 +270,32 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.view = viewJobs
 		a.resizeViews()
 		return a, a.pollJobs()
+
+	case startUpdateMsg:
+		book := a.store.FindBySource(m.novelID)
+		if book == nil {
+			a.status = m.title + " is not in the library yet — press Enter to download"
+			return a, nil
+		}
+		a.jobs.startUpdate(book, a.dl)
+		a.view = viewJobs
+		a.resizeViews()
+		return a, a.pollJobs()
+
+	case updateDoneMsg:
+		if m.err != nil {
+			a.status = fmt.Sprintf("%s update failed: %v", m.title, m.err)
+		} else if m.added > 0 {
+			a.status = fmt.Sprintf("updated %s: +%d chapters (%d total)", m.title, m.added, m.total)
+			a.library.refresh()
+		} else {
+			a.status = fmt.Sprintf("%s is up to date (%d chapters)", m.title, m.total)
+		}
+		return a, nil
+
+	case statusFlashMsg:
+		a.status = m.text
+		return a, nil
 
 	case exitReaderMsg:
 		a.backToLibrary()
@@ -571,7 +619,7 @@ func (a *App) tabBar() string {
 func footerBar(a *App, v viewKind) string {
 	switch v {
 	case viewLibrary:
-		return footerHint.Render("enter: read · i: import · d: delete · x: reset progress · /: filter")
+		return footerHint.Render("enter: read · u: update · i: import · d: delete · x: reset progress · /: filter")
 	case viewSearch:
 		// The detail page renders its own action footer; the generic search
 		// hint would stack confusingly below it.
