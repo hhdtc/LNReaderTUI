@@ -136,7 +136,7 @@ func mouseList(msg tea.MouseMsg, m *list.Model, topRow, itemHeight int) bool {
 		}
 		return true
 	}
-	if msg.Button == tea.MouseButtonLeft && msg.Y > topRow {
+	if msg.Button == tea.MouseButtonLeft && msg.Y >= topRow {
 		rel := (msg.Y - topRow) / max(itemHeight, 1)
 		if rel >= m.Paginator.PerPage {
 			rel = m.Paginator.PerPage - 1
