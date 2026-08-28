@@ -39,6 +39,7 @@ type job struct {
 	novelID  string
 	srcURL   string
 	title    string
+	author   string
 	bookID   string
 	status   jobStatus
 	done     int
@@ -223,6 +224,7 @@ func (v *jobsView) start(b site.Book, dl *site.Downloader) {
 		novelID: novelID,
 		srcURL:  b.URL,
 		title:   b.Title,
+		author:  b.Author,
 		status:  statusRunning,
 		cancel:  cancel,
 	}
@@ -374,7 +376,7 @@ func (v *jobsView) remove(j *job) {
 
 func (v *jobsView) importJob(j *job) tea.Cmd {
 	return func() tea.Msg {
-		b, err := v.store.RegisterDownloaded(j.outPath, "", "", j.novelID, j.srcURL, j.total)
+		b, err := v.store.RegisterDownloaded(j.outPath, j.title, j.author, j.novelID, j.srcURL, j.total)
 		if err != nil {
 			return jobImportedMsg{id: j.id, err: err}
 		}

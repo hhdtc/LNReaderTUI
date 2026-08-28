@@ -295,14 +295,21 @@ func (s *Store) ResetProgress(id string) error {
 // existing entry in place: id and reading progress are preserved.
 func (s *Store) RegisterDownloaded(srcPath, title, author, novelID, srcURL string, totalChapters int) (*Book, error) {
 	ext := strings.ToLower(filepath.Ext(srcPath))
+	// The caller may not know the title yet (TUI jobs pass ""); take it from
+	// the parsed EPUB so the file name is never "…-<novelID>" only.
 	name := safeFileName(title)
+	if name == "" {
+		if parsedSrc, err := epub.ReadFile(srcPath); err == nil {
+			name = safeFileName(parsedSrc.Title)
+		}
+	}
+	if name == "" {
+		name = "book"
+	}
 	if novelID != "" {
 		name += "-" + novelID
 	} else {
 		name += "-" + newID()
-	}
-	if name == "" {
-		name = newID()
 	}
 	finalPath := filepath.Join("books", name+ext)
 	dst := filepath.Join(s.dataDir, finalPath)
