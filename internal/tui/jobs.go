@@ -241,6 +241,14 @@ func (v *jobsView) markImported(id string) {
 
 func (v *jobsView) Update(msg tea.Msg) (*jobsView, tea.Cmd) {
 	switch m := msg.(type) {
+	case tea.MouseMsg:
+		if m.Y == 0 {
+			return v, nil
+		}
+		if mouseList(m, &v.list, 3, 2) {
+			return v, nil
+		}
+		return v, nil
 	case tea.KeyMsg:
 		switch m.String() {
 		case "x":

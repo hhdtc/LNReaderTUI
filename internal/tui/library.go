@@ -95,6 +95,18 @@ func (v *libraryView) resize(width, height int) {
 
 func (v *libraryView) Update(msg tea.Msg) (*libraryView, tea.Cmd) {
 	switch m := msg.(type) {
+	case tea.MouseMsg:
+		if m.Y == 0 {
+			return v, nil // tab bar is handled by the app
+		}
+		topRow := 3
+		if v.filtering {
+			topRow = 4
+		}
+		if mouseList(m, &v.list, topRow, 2) {
+			return v, nil
+		}
+		return v, nil
 	case tea.KeyMsg:
 		switch m.String() {
 		case "/", "f":

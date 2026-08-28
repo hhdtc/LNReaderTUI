@@ -3,6 +3,8 @@ package tui
 import (
 	"strings"
 
+	"github.com/charmbracelet/bubbles/list"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-runewidth"
 )
@@ -111,4 +113,42 @@ func max(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// mouseList implements click-to-select and wheel for a bubbles list.
+// topRow is the 0-based terminal row where the item rows begin; items render
+// itemHeight rows each (default delegate: 2 = title + description).
+// Returns true when the message was consumed.
+func mouseList(msg tea.MouseMsg, m *list.Model, topRow, itemHeight int) bool {
+	if msg.Action != tea.MouseActionPress {
+		return false
+	}
+	if msg.Button == tea.MouseButtonWheelUp {
+		if m.Cursor() > 0 || !m.Paginator.OnFirstPage() {
+			m.CursorUp()
+		}
+		_ = m
+		return true
+	}
+	if msg.Button == tea.MouseButtonWheelDown {
+		if m.Cursor() < m.Paginator.PerPage-1 || !m.Paginator.OnLastPage() {
+			m.CursorDown()
+		}
+		return true
+	}
+	if msg.Button == tea.MouseButtonLeft && msg.Y > topRow {
+		rel := (msg.Y - topRow) / max(itemHeight, 1)
+		if rel >= m.Paginator.PerPage {
+			rel = m.Paginator.PerPage - 1
+		}
+		abs := m.Paginator.Page*m.Paginator.PerPage + rel
+		if total := len(m.Items()); abs >= total {
+			abs = total - 1
+		}
+		if abs >= 0 {
+			m.Select(abs)
+		}
+		return true
+	}
+	return false
 }

@@ -366,13 +366,19 @@ func (v *searchView) Update(msg tea.Msg) (*searchView, tea.Cmd) {
 			v.detailVp, cmd = v.detailVp.Update(msg)
 			return v, cmd
 		}
+		if m.Y == 0 {
+			return v, nil // tab bar is handled by the app
+		}
 		if v.input.Focused() {
 			v.input.Blur()
 			v.syncDelegate()
 		}
-		var cmd tea.Cmd
-		v.list, cmd = v.list.Update(msg)
-		return v, cmd
+		topRow := 6 // nav + title + input + status + "Results" + "N items"
+		if mouseList(m, &v.list, topRow, 2) {
+			return v, nil
+		}
+		// wheel before selection: still consumed above
+		return v, nil
 	case tea.KeyMsg:
 		// Detail page mode owns the keyboard except for its action keys.
 		if v.detail != nil {
