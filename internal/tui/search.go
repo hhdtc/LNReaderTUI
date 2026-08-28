@@ -374,10 +374,11 @@ func (v *searchView) Update(msg tea.Msg) (*searchView, tea.Cmd) {
 			v.syncDelegate()
 		}
 		topRow := 6 // nav + title + input + status + "Results" + "N items"
-		if mouseList(m, &v.list, topRow, 2) {
+		// The default delegate truncates descriptions to one line, so every
+		// item renders exactly 2 rows (title + description).
+		if mouseList(m, &v.list, topRow, func(int) int { return 2 }) {
 			return v, nil
 		}
-		// wheel before selection: still consumed above
 		return v, nil
 	case tea.KeyMsg:
 		// Detail page mode owns the keyboard except for its action keys.

@@ -116,10 +116,12 @@ func max(a, b int) int {
 }
 
 // mouseList implements click-to-select and wheel for a bubbles list.
-// topRow is the 0-based terminal row where the item rows begin; items render
-// itemHeight rows each (default delegate: 2 = title + description).
+// topRow is the 0-based terminal row where the item rows begin. Items can
+// have variable heights (wrapped descriptions), so itemLines reports the
+// rendered row count for an item index; clicks walk the cumulative heights.
 // Returns true when the message was consumed.
-func mouseList(msg tea.MouseMsg, m *list.Model, topRow, itemHeight int) bool {
+func mouseList(msg tea.MouseMsg, m *list.Model, topRow int,
+	itemLines func(idx int) int) bool {
 	if msg.Action != tea.MouseActionPress {
 		return false
 	}
@@ -127,7 +129,6 @@ func mouseList(msg tea.MouseMsg, m *list.Model, topRow, itemHeight int) bool {
 		if m.Cursor() > 0 || !m.Paginator.OnFirstPage() {
 			m.CursorUp()
 		}
-		_ = m
 		return true
 	}
 	if msg.Button == tea.MouseButtonWheelDown {
@@ -137,16 +138,19 @@ func mouseList(msg tea.MouseMsg, m *list.Model, topRow, itemHeight int) bool {
 		return true
 	}
 	if msg.Button == tea.MouseButtonLeft && msg.Y >= topRow {
-		rel := (msg.Y - topRow) / max(itemHeight, 1)
-		if rel >= m.Paginator.PerPage {
-			rel = m.Paginator.PerPage - 1
+		y := msg.Y - topRow
+		first := m.Paginator.Page * m.Paginator.PerPage
+		total := len(m.Items())
+		for i := first; i < first+m.Paginator.PerPage && i < total; i++ {
+			h := itemLines(i)
+			if y < h {
+				m.Select(i)
+				return true
+			}
+			y -= h
 		}
-		abs := m.Paginator.Page*m.Paginator.PerPage + rel
-		if total := len(m.Items()); abs >= total {
-			abs = total - 1
-		}
-		if abs >= 0 {
-			m.Select(abs)
+		if total > 0 {
+			m.Select(total - 1)
 		}
 		return true
 	}

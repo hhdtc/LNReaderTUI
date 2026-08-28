@@ -103,7 +103,9 @@ func (v *libraryView) Update(msg tea.Msg) (*libraryView, tea.Cmd) {
 		if v.filtering {
 			topRow = 4
 		}
-		if mouseList(m, &v.list, topRow, 2) {
+		// The default delegate truncates descriptions to one line, so every
+		// item renders exactly 2 rows (title + description).
+		if mouseList(m, &v.list, topRow, func(int) int { return 2 }) {
 			return v, nil
 		}
 		return v, nil
