@@ -358,6 +358,21 @@ func (v *searchView) Update(msg tea.Msg) (*searchView, tea.Cmd) {
 			return v, v.runSearch(v.pending)
 		}
 		return v, nil
+	case tea.MouseMsg:
+		// Mouse: detail viewport scrolls; otherwise clicks go to the result
+		// list (and take focus away from the query input, like ↓).
+		if v.detail != nil {
+			var cmd tea.Cmd
+			v.detailVp, cmd = v.detailVp.Update(msg)
+			return v, cmd
+		}
+		if v.input.Focused() {
+			v.input.Blur()
+			v.syncDelegate()
+		}
+		var cmd tea.Cmd
+		v.list, cmd = v.list.Update(msg)
+		return v, cmd
 	case tea.KeyMsg:
 		// Detail page mode owns the keyboard except for its action keys.
 		if v.detail != nil {

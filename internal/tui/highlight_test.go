@@ -1,9 +1,11 @@
 package tui
 
 import (
+	"fmt"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"lnreadertui/internal/site"
 )
@@ -204,5 +206,46 @@ func TestUpFromPage2GoesPrevPage(t *testing.T) {
 	a = drain(a, keyArrow(tea.KeyUp))
 	if !a.search.input.Focused() {
 		t.Fatal("up from page 1 top should return to input")
+	}
+}
+
+// Tab bar clicks: row 1, columns map to Library/Search/Downloads.
+func TestMouseTabClick(t *testing.T) {
+	a := newTestApp(t)
+	if a.tabAtX(1) != 0 {
+		t.Fatalf("x=1 -> %d, want Library", a.tabAtX(1))
+	}
+	search := a.tabAtX(999)
+	_ = search
+	// click on Search (middle) and Downloads columns via precise coords:
+	// compute the same way tabBar lays out.
+	names := []string{"Library", "Search", "Downloads"}
+	pos := 1
+	xs := map[int]int{}
+	for i, name := range names {
+		label := name
+		_ = label
+		xs[i] = pos
+		width := lipgloss.Width(fmt.Sprintf("%d %s", i+1, name)) + 4
+		pos += width + 1
+	}
+	m, _ := a.Update(tea.MouseMsg{X: xs[1] + 1, Y: 0,
+		Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
+	a = m.(*App)
+	if a.view != viewSearch {
+		t.Fatalf("click on Search column landed on view %d", a.view)
+	}
+	m, _ = a.Update(tea.MouseMsg{X: xs[2] + 1, Y: 0,
+		Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
+	a = m.(*App)
+	if a.view != viewJobs {
+		t.Fatalf("click on Downloads column landed on view %d", a.view)
+	}
+	// Clicks outside the tab bar are ignored.
+	m, _ = a.Update(tea.MouseMsg{X: 5, Y: 12,
+		Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
+	a = m.(*App)
+	if a.view != viewJobs {
+		t.Fatalf("click outside tabs changed view: %d", a.view)
 	}
 }

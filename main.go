@@ -196,7 +196,7 @@ var runBubbletea = func(p *tui.App) error {
 
 // runApp wraps the bubbletea program; separated so tests can stub it.
 var runApp = func(p *tui.App) error {
-	prog := tea.NewProgram(p, tea.WithAltScreen())
+	prog := tea.NewProgram(p, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	_, err := prog.Run()
 	return err
 }

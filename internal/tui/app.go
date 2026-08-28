@@ -253,6 +253,17 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.backToLibrary()
 		return a, nil
 
+	case tea.MouseMsg:
+		// Tab bar clicks (row 0) switch tabs; everything else falls through
+		// to the active view (list clicks, wheel scrolling, …).
+		if m.Action == tea.MouseActionPress && m.Button == tea.MouseButtonLeft &&
+			a.view != viewReader && m.Y == 0 {
+			if idx := a.tabAtX(m.X); idx >= 0 {
+				a.view = viewKind(idx)
+				a.afterViewChange()
+				return a, nil
+			}
+		}
 	case tea.KeyMsg:
 		// A fast typist (or a paste) can arrive as ONE KeyMsg holding many
 		// runes. Shortcuts match single runes, so split the burst up before
@@ -506,6 +517,32 @@ func padFrame(s string, n int) string {
 		lines = append(lines, "")
 	}
 	return strings.Join(lines, "\n")
+}
+
+// tabAtX maps a terminal column to a tab index (tab bar rows are y=1;
+// the renderer outputs a leading newline on some setups, so the caller
+// passes the row-based coordinate and expects 0-based offsets).
+func (a *App) tabAtX(x int) int {
+	names := []string{"Library", "Search", "Downloads"}
+	x -= 1 // left margin of the tab bar content
+	pos := 0
+	for i, name := range names {
+		label := fmt.Sprintf("%d %s", i+1, name)
+		var w int
+		if viewKind(i) == a.view {
+			w = lipgloss.Width(tabActive.Render(" " + label + " "))
+		} else {
+			w = lipgloss.Width(tabInactive.Render(" " + label + " "))
+		}
+		if x >= pos && x < pos+w {
+			return i
+		}
+		pos += w
+		if i < len(names)-1 {
+			pos += lipgloss.Width(tabSep.Render("│"))
+		}
+	}
+	return -1
 }
 
 func (a *App) tabBar() string {
