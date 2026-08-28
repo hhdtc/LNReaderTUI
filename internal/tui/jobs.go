@@ -245,7 +245,7 @@ func (v *jobsView) Update(msg tea.Msg) (*jobsView, tea.Cmd) {
 		if m.Y == 0 {
 			return v, nil
 		}
-		if mouseList(m, &v.list, 3, func(int) int { return 2 }) {
+		if mouseList(m, &v.list, 5, func(int) int { return 3 }) {
 			return v, nil
 		}
 		return v, nil

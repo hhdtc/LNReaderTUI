@@ -49,8 +49,6 @@ type searchView struct {
 	detail *searchDetail
 	// detailVp renders the (possibly long) detail body with scrolling.
 	detailVp     viewport.Model
-	itemTop      int
-	itemStride   int
 	detailDirty  bool
 	detailBuiltW int
 
@@ -189,16 +187,6 @@ func (v *searchView) detailBody(width int) []string {
 
 // measureItemLayout captures the search results geometry from the rendered
 // list (called from View); used by the mouse click mapping.
-func (v *searchView) measureItemLayout() {
-	titles := make([]string, 0, len(v.list.Items()))
-	for i := range v.list.Items() {
-		if it, ok := v.list.Items()[i].(searchItem); ok {
-			titles = append(titles, it.Title())
-		}
-	}
-	v.itemTop, v.itemStride = itemLayout(titles, v.list.View())
-}
-
 // dimmed is a light ANSI style helper (avoid lipgloss dependency per item).
 func dimmed(s string) string {
 	return "\x1b[38;5;245m" + s + "\x1b[0m"
@@ -387,15 +375,11 @@ func (v *searchView) Update(msg tea.Msg) (*searchView, tea.Cmd) {
 			v.input.Blur()
 			v.syncDelegate()
 		}
-		topRow := v.itemTop
-		if topRow <= 0 {
-			topRow = 5
-		}
-		if v.itemStride < 1 {
-			v.itemStride = 2
-		}
-		if mouseList(m, &v.list, topRow,
-			func(int) int { return v.itemStride }) {
+		// Structural geometry: nav(1) + title(1) + input(1) + status(1) +
+		// "Results"(1) + blank(1) + "N items"(1) + blank(1) = first item at
+		// row 8; each item is title + description + spacing = 3 rows.
+		const searchTopRow = 8
+		if mouseList(m, &v.list, searchTopRow, func(int) int { return 3 }) {
 			return v, nil
 		}
 		return v, nil
@@ -509,7 +493,6 @@ func (v *searchView) View(width, height int) string {
 	if v.detail != nil {
 		return v.detailView(width, height)
 	}
-	v.measureItemLayout()
 	parts := []string{}
 	parts = append(parts, titleStyle.Render("Online search — bilinovel.com"))
 	parts = append(parts, v.input.View())

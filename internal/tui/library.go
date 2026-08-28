@@ -101,15 +101,11 @@ func (v *libraryView) Update(msg tea.Msg) (*libraryView, tea.Cmd) {
 		if m.Y == 0 {
 			return v, nil // tab bar is handled by the app
 		}
-		topRow := v.itemTop
-		if topRow <= 0 {
-			topRow = 2
-		}
-		if v.itemStride < 1 {
-			v.itemStride = 2
-		}
-		if mouseList(m, &v.list, topRow,
-			func(int) int { return v.itemStride }) {
+		// Structural geometry for this bubbles version: tab bar(1) +
+		// list title(1) + blank(1) + status bar(1) + blank(1) = first item
+		// at row 5; each item is title + description + spacing = 3 rows.
+		const libTopRow = 5
+		if mouseList(m, &v.list, libTopRow, func(int) int { return 3 }) {
 			return v, nil
 		}
 		return v, nil
@@ -165,15 +161,6 @@ func (v *libraryView) applyFilter(q string) {
 }
 
 func (v *libraryView) View(width, height int) string {
-	// Measure the real item geometry from the rendered list so clicks track
-	// the mouse under any terminal layout.
-	titles := make([]string, 0, len(v.list.Items()))
-	for i := range v.list.Items() {
-		if it, ok := v.list.Items()[i].(libItem); ok {
-			titles = append(titles, it.Title())
-		}
-	}
-	v.itemTop, v.itemStride = itemLayout(titles, v.list.View())
 	if v.filtering {
 		return lipgloss.JoinVertical(lipgloss.Left,
 			titleStyle.Render("Library — filter"),

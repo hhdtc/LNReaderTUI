@@ -156,36 +156,3 @@ func mouseList(msg tea.MouseMsg, m *list.Model, topRow int,
 	}
 	return false
 }
-
-// itemLayout measures the real item geometry (start row + stride) from the
-// rendered list output, so clicks stay correct under any terminal font,
-// spacing or status-bar layout.
-func itemLayout(itemTitles []string, listOut string) (startRow, stride int) {
-	stride = 2
-	if len(itemTitles) == 0 {
-		return 2, stride
-	}
-	lines := strings.Split(listOut, "\n")
-	first := -1
-	second := -1
-	for i, l := range lines {
-		if first < 0 && strings.Contains(l, itemTitles[0]) {
-			first = i
-			continue
-		}
-		if first >= 0 && second < 0 && len(itemTitles) > 1 &&
-			strings.Contains(l, itemTitles[1]) {
-			second = i
-			break
-		}
-	}
-	if first < 0 {
-		return 2, stride // fallback: list starts after title+status rows
-	}
-	if second > first {
-		stride = max(second-first, 1)
-	}
-	// +1: the list output begins on the frame row after the tab bar.
-	startRow = first + 1
-	return startRow, stride
-}
