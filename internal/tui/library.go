@@ -14,10 +14,12 @@ import (
 )
 
 type libraryView struct {
-	store     *model.Store
-	list      list.Model
-	filter    textinput.Model
-	filtering bool
+	store      *model.Store
+	list       list.Model
+	filter     textinput.Model
+	filtering  bool
+	itemTop    int // measured item start row (0-based), filled by View
+	itemStride int
 }
 
 type libItem struct {
@@ -99,13 +101,15 @@ func (v *libraryView) Update(msg tea.Msg) (*libraryView, tea.Cmd) {
 		if m.Y == 0 {
 			return v, nil // tab bar is handled by the app
 		}
-		topRow := 3
-		if v.filtering {
-			topRow = 4
+		topRow := v.itemTop
+		if topRow <= 0 {
+			topRow = 2
 		}
-		// The default delegate truncates descriptions to one line, so every
-		// item renders exactly 2 rows (title + description).
-		if mouseList(m, &v.list, topRow, func(int) int { return 2 }) {
+		if v.itemStride < 1 {
+			v.itemStride = 2
+		}
+		if mouseList(m, &v.list, topRow,
+			func(int) int { return v.itemStride }) {
 			return v, nil
 		}
 		return v, nil
@@ -161,6 +165,15 @@ func (v *libraryView) applyFilter(q string) {
 }
 
 func (v *libraryView) View(width, height int) string {
+	// Measure the real item geometry from the rendered list so clicks track
+	// the mouse under any terminal layout.
+	titles := make([]string, 0, len(v.list.Items()))
+	for i := range v.list.Items() {
+		if it, ok := v.list.Items()[i].(libItem); ok {
+			titles = append(titles, it.Title())
+		}
+	}
+	v.itemTop, v.itemStride = itemLayout(titles, v.list.View())
 	if v.filtering {
 		return lipgloss.JoinVertical(lipgloss.Left,
 			titleStyle.Render("Library — filter"),

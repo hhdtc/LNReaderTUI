@@ -49,6 +49,8 @@ type searchView struct {
 	detail *searchDetail
 	// detailVp renders the (possibly long) detail body with scrolling.
 	detailVp     viewport.Model
+	itemTop      int
+	itemStride   int
 	detailDirty  bool
 	detailBuiltW int
 
@@ -183,6 +185,18 @@ func (v *searchView) detailBody(width int) []string {
 		}
 	}
 	return lines
+}
+
+// measureItemLayout captures the search results geometry from the rendered
+// list (called from View); used by the mouse click mapping.
+func (v *searchView) measureItemLayout() {
+	titles := make([]string, 0, len(v.list.Items()))
+	for i := range v.list.Items() {
+		if it, ok := v.list.Items()[i].(searchItem); ok {
+			titles = append(titles, it.Title())
+		}
+	}
+	v.itemTop, v.itemStride = itemLayout(titles, v.list.View())
 }
 
 // dimmed is a light ANSI style helper (avoid lipgloss dependency per item).
@@ -373,10 +387,15 @@ func (v *searchView) Update(msg tea.Msg) (*searchView, tea.Cmd) {
 			v.input.Blur()
 			v.syncDelegate()
 		}
-		topRow := 6 // nav + title + input + status + "Results" + "N items"
-		// The default delegate truncates descriptions to one line, so every
-		// item renders exactly 2 rows (title + description).
-		if mouseList(m, &v.list, topRow, func(int) int { return 2 }) {
+		topRow := v.itemTop
+		if topRow <= 0 {
+			topRow = 5
+		}
+		if v.itemStride < 1 {
+			v.itemStride = 2
+		}
+		if mouseList(m, &v.list, topRow,
+			func(int) int { return v.itemStride }) {
 			return v, nil
 		}
 		return v, nil
@@ -490,6 +509,7 @@ func (v *searchView) View(width, height int) string {
 	if v.detail != nil {
 		return v.detailView(width, height)
 	}
+	v.measureItemLayout()
 	parts := []string{}
 	parts = append(parts, titleStyle.Render("Online search — bilinovel.com"))
 	parts = append(parts, v.input.View())

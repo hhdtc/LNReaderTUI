@@ -268,3 +268,16 @@ func TestMouseListClickSelects(t *testing.T) {
 		t.Fatal("cursor went negative")
 	}
 }
+
+// itemLayout must find the real start row + item stride even when the list
+// renders extra header rows or spacing.
+func TestItemLayoutMeasuresGeometry(t *testing.T) {
+	out := "\n   Library\n   6 items\n   长文测试书\n   测试 · 1/1 chapters\n\n   月之珊瑚\n   奈须蘑菇 · 1/4\n"
+	start, stride := itemLayout([]string{"长文测试书", "月之珊瑚"}, out)
+	if start != 4 {
+		t.Fatalf("start = %d, want 4 (list output begins after the tab row)", start)
+	}
+	if stride != 3 {
+		t.Fatalf("stride = %d, want 3 (title + desc + blank)", stride)
+	}
+}
