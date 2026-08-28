@@ -19,6 +19,8 @@ import (
 	"strings"
 	"syscall"
 
+	term "github.com/charmbracelet/x/term"
+
 	tea "github.com/charmbracelet/bubbletea"
 
 	"lnreadertui/internal/model"
@@ -27,13 +29,22 @@ import (
 	"lnreadertui/internal/tui"
 )
 
+// version is stamped at build time via -ldflags "-X main.version=<ver>".
+var version = "dev"
+
 func main() {
 	dataDirFlag := flag.String("data-dir", defaultDataDir(),
 		"directory for the library index and imported books")
 	importFlag := flag.String("import", "",
 		"legacy: import .epub/.txt files (or a directory) at startup, then exit")
+	versionFlag := flag.Bool("version", false, "print version and exit")
 	flag.Usage = usage
 	flag.Parse()
+
+	if *versionFlag {
+		fmt.Printf("lnreadertui %s\n", version)
+		return
+	}
 
 	// Legacy one-shot import flag.
 	if *importFlag != "" {
@@ -49,6 +60,11 @@ func main() {
 
 	args := flag.Args()
 	if len(args) == 0 {
+		if !isTerminal(os.Stdout) {
+			fmt.Fprintln(os.Stderr,
+				"lnreadertui: interactive mode requires a VT terminal; use a subcommand (search|detail|download|books|import) or --help")
+			return
+		}
 		store, err := model.Open(*dataDirFlag)
 		if err != nil {
 			fatal(err)
@@ -106,7 +122,10 @@ func main() {
 		asJSON := cmd.Bool("json", false, "print JSON instead of readable text")
 		_ = cmd.Parse(reorderMixedFlags(cmd, args[1:]))
 		sub := cmd.Arg(0)
-		key := strings.Join(cmd.Args()[1:], " ")
+		var key string
+		if rest := cmd.Args(); len(rest) > 1 {
+			key = strings.Join(rest[1:], " ")
+		}
 		runBooks(store, sub, key, *asJSON)
 
 	case "import":
@@ -124,6 +143,13 @@ func main() {
 		usage()
 		os.Exit(2)
 	}
+}
+
+// isTerminal reports whether f is a terminal device. The bubbletea TUI cannot
+// run in headless contexts (CI sandboxes, piped output): opening a TTY fails
+// and the process exits non-zero, which breaks headless launch probes.
+func isTerminal(f *os.File) bool {
+	return term.IsTerminal(f.Fd())
 }
 
 // reorderMixedFlags lets flags appear anywhere on the command line (not just

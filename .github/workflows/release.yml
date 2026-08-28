@@ -47,7 +47,7 @@ jobs:
           CGO_ENABLED: "0"
         run: |
           mkdir -p dist
-          go build -trimpath -ldflags "-s -w" \
+          go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_REF_NAME#v}" \
             -o dist/lnreadertui-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} .
 
       - name: Package Windows portable zip
