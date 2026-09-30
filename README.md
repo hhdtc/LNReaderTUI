@@ -57,7 +57,17 @@ brew install lnreadertui                # 安装预编译 bottle，无需 Go / X
 
 > Homebrew 5.x 起第三方 tap 需要显式信任（`brew trust hhdtc/tap`）。查看公式内容可先执行 `brew cat hhdtc/tap/lnreadertui`。
 
-**方式一：直接下载二进制**（无需安装 Go）
+**方式一：winget（Windows 推荐）**
+
+```powershell
+winget install hhdtc.LNReaderTUI
+```
+
+升级：`winget upgrade hhdtc.LNReaderTUI`；卸载：`winget uninstall hhdtc.LNReaderTUI`。
+
+> 清单已收录进 [winget-pkgs](https://github.com/microsoft/winget-pkgs/tree/master/manifests/h/hhdtc/LNReaderTUI)（`InstallerType: zip` + portable），安装后直接在 Windows Terminal 中运行 `lnreadertui`。经典 `cmd.exe` 不支持 VT 渲染，请使用 Windows Terminal。
+
+**方式二：直接下载二进制**（无需安装 Go）
 
 从 [Releases](https://github.com/hhdtc/LNReaderTUI/releases) 下载对应平台的二进制即可：
 
@@ -78,7 +88,7 @@ chmod +x lnreadertui-linux-amd64
 
 可不带架构后缀：`mv lnreadertui-linux-amd64 lnreadertui && ./lnreadertui`。
 
-**方式二：从源码构建**（Go 1.22+）
+**方式三：从源码构建**（Go 1.22+）
 
 ```bash
 go build -o lnreadertui .
