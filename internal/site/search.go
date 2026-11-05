@@ -467,6 +467,13 @@ func suggestFor(query string, books []Book) string {
 	return best
 }
 
+// Similarity reports how alike two strings are, as
+// 2*LCS(runes) / (len(a)+len(b)) in 0..1.
+//
+// Callers that reconcile site text with local text use it: the catalog listing
+// and the chapter heading of the same chapter can differ by a substituted glyph.
+func Similarity(a, b string) float64 { return similarity(a, b) }
+
 // similarity returns a SequenceMatcher-like ratio: 2*LCS(runes) / (len(a)+len(b)).
 func similarity(a, b string) float64 {
 	ra, rb := []rune(a), []rune(b)

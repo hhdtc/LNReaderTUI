@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"unicode"
 
 	"lnreadertui/internal/epub"
 	"lnreadertui/internal/site"
@@ -257,6 +258,36 @@ func oldTitles(old *epub.RawBook) []string {
 	return out
 }
 
+// catalogTitleMatches reports whether a catalog listing names the same chapter
+// as the local title.
+//
+// The listing page occasionally serves a substituted glyph for one character
+// (for example 女 written as N in "概要女王的败北"), while the chapter page
+// itself keeps the real title. Chapter headings are what both the local titles
+// and every appended chapter use, so such a substitution must not look like a
+// changed catalog; a genuinely renamed or reordered chapter still aborts.
+func catalogTitleMatches(local, remote string) bool {
+	a, b := compactTitle(local), compactTitle(remote)
+	if a == b {
+		return true
+	}
+	if a == "" || b == "" {
+		return false
+	}
+	return site.Similarity(a, b) >= 0.8
+}
+
+// compactTitle drops whitespace (including the ideographic space) so spacing
+// differences in a listing never read as a title change.
+func compactTitle(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsSpace(r) {
+			return -1
+		}
+		return r
+	}, strings.TrimSpace(s))
+}
+
 // volumeAt returns the volume title containing chapter pos.
 func volumeAt(volumes []site.VolumeRef, pos int) string {
 	offset := 0
@@ -292,9 +323,10 @@ func diffCatalog(localTitles []string, remote []site.VolumeRef) (int, []site.Cha
 		if expect == "" {
 			expect = fmt.Sprintf("第 %d 章", i+1)
 		}
-		if strings.TrimSpace(t) != expect {
+		if !catalogTitleMatches(t, expect) {
 			return 0, nil, nil, fmt.Errorf(
-				"site catalog changed at chapter %d (%q vs local %q); update aborted",
+				"site catalog changed at chapter %d (%q vs local %q); update aborted — "+
+					"the chapter list no longer matches this book, so re-download it if the site really renamed chapters",
 				i+1, expect, t)
 		}
 	}

@@ -90,3 +90,49 @@ func TestDiffCatalogSplitVolumeWithinOneVolume(t *testing.T) {
 		t.Fatalf("merged count = %d, want 3", merged[0].Count)
 	}
 }
+
+// TestDiffCatalogToleratesSubstitutedGlyph: the listing page can serve one
+// substituted character (女 -> N) while the chapter page keeps the real title,
+// as observed on 玩乐关系 chapter 3 ("概要N王的败北" vs "概要女王的败北").
+// The chapter heading is what both sides store, so this is not a divergence.
+func TestDiffCatalogToleratesSubstitutedGlyph(t *testing.T) {
+	local := []string{"插图", "【第一话】掷骰问题（Day176）", "【第二话】概要女王的败北（Day58）"}
+	remote := []site.VolumeRef{vol("玩乐关系 1",
+		ch("插图"),
+		ch("【第一话】掷骰问题（Day176）"),
+		ch("【第二话】概要N王的败北（Day58）"),
+		ch("【第三话】隐藏真身的两难（Day93）"),
+	)}
+	start, added, _, err := diffCatalog(local, remote)
+	if err != nil {
+		t.Fatalf("substituted glyph aborted the update: %v", err)
+	}
+	if start != 3 || len(added) != 1 || added[0].Title != "【第三话】隐藏真身的两难（Day93）" {
+		t.Fatalf("start=%d added=%+v", start, added)
+	}
+}
+
+// TestDiffCatalogToleratesSpacing: listing spacing is not a title change.
+func TestDiffCatalogToleratesSpacing(t *testing.T) {
+	remote := []site.VolumeRef{vol("卷", ch("第 1 章 开始"), ch("第2章\u3000继续"))}
+	if _, _, _, err := diffCatalog([]string{"第1章开始", "第2章 继续"}, remote); err != nil {
+		t.Fatalf("whitespace aborted the update: %v", err)
+	}
+}
+
+// TestDiffCatalogReorderedAborts: reordering keeps the count but must abort.
+func TestDiffCatalogReorderedAborts(t *testing.T) {
+	remote := []site.VolumeRef{vol("卷",
+		ch("【第一话】掷骰问题（Day176）"),
+		ch("【第三话】隐藏真身的两难（Day93）"),
+		ch("【第二话】概要女王的败北（Day58）"),
+	)}
+	local := []string{
+		"【第一话】掷骰问题（Day176）",
+		"【第二话】概要女王的败北（Day58）",
+		"【第三话】隐藏真身的两难（Day93）",
+	}
+	if _, _, _, err := diffCatalog(local, remote); err == nil {
+		t.Fatal("expected abort on reordered catalog")
+	}
+}

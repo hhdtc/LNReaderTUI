@@ -519,6 +519,11 @@ func findBook(store *model.Store, key string) (*model.Book, error) {
 	if b := store.Find(key); b != nil {
 		return b, nil
 	}
+	// The library id is opaque, so accept the site's novel id too: that is what
+	// search results, detail pages, and `download` print for the same book.
+	if b := store.FindBySource(key); b != nil {
+		return b, nil
+	}
 	for _, b := range store.Books() {
 		if strings.Contains(b.Title, key) {
 			return b, nil
@@ -547,8 +552,12 @@ func runUpdate(store *model.Store, key string, asJSON bool) {
 	if err != nil {
 		fatal(err)
 	}
-	if err := store.UpdateBookIndex(b.ID, res.NewTotal, "", ""); err != nil {
-		fatal(err)
+	// Only rewrite the index when the chapter count actually moved: a no-op
+	// update should not touch library.json at all.
+	if res.NewTotal != b.Chapters {
+		if err := store.UpdateBookIndex(b.ID, res.NewTotal, "", ""); err != nil {
+			fatal(err)
+		}
 	}
 	if asJSON {
 		printJSON(struct {
