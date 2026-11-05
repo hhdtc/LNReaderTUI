@@ -34,6 +34,11 @@ each new version follows the same three steps:
    into `winget/manifests/h/hhdtc/LNReaderTUI/vX.Y.Z/hhdtc.LNReaderTUI.installer.yaml`.
 3. **Open the upstream PR** (see below) with the new version directory.
 
+`hhdtc.LNReaderTUI` is already in winget-pkgs, so every PR after the first one is an *update*: add the new
+version directory and leave the older ones untouched. Title it `Update: hhdtc.LNReaderTUI to X.Y.Z`
+(the first submission used `New package: hhdtc.LNReaderTUI version X.Y.Z`). The `New-Manifest` label the
+bot applies is about the new manifest *files*, not about the package being new.
+
 `1.1.6` ships `x64` and `arm64` installers, both verified against the published release assets.
 
 ## Steps to submit to winget-pkgs
