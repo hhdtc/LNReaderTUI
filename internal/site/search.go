@@ -1,6 +1,11 @@
-// Package site implements the bilinovel.com (linovelib mirror) search and
+// Package site implements the bilinovel.net (linovelib mirror) search and
 // download pipeline, ported from LNReader's backend/services/linovelib.py
 // and bilinovel_downloader.py.
+//
+// The site moved from bilinovel.com to bilinovel.net; requests to the old host
+// are redirected, and the search-guard cookies are host-scoped, so every URL
+// this package builds uses the current host in BaseURL. Reader-facing URLs may
+// still arrive on either host, so URL parsing accepts both.
 //
 // The search form is protected by the Jieqi "search guard" cookie chain
 // (/search.html?search_guard=css|js|redeem). It is fully replicable with
@@ -23,8 +28,8 @@ import (
 )
 
 const (
-	SearchURL = "https://www.bilinovel.com/search.html"
-	BaseURL   = "https://www.bilinovel.com"
+	SearchURL = "https://www.bilinovel.net/search.html"
+	BaseURL   = "https://www.bilinovel.net"
 
 	searchUA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " +
 		"(KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
@@ -32,7 +37,12 @@ const (
 	placeholderCover = "book-cover-no.svg"
 )
 
-var novelURLRe = regexp.MustCompile(`(?:linovelib|bilinovel)\.com/(?:novel|download)/\d+`)
+// novelURLRe matches a novel address on either host the site has served from.
+var novelURLRe = regexp.MustCompile(`(?:linovelib|bilinovel)\.(?:com|net)/(?:novel|download)/\d+`)
+
+// pageAdressRe splits a served search-page address into origin, host, and path
+// so guard requests and their cookies follow whatever host answered.
+var pageAdressRe = regexp.MustCompile(`^(https?://([^/]+))(/[^?#]*)`)
 
 // Book is a search result (or a novel detail page, when the query matched an
 // exact title and the site redirected to /novel/<id>.html).
@@ -88,35 +98,52 @@ func runGuard(ctx context.Context, c tlsclient.HttpClient) error {
 	if page.StatusCode != 200 || page.Body == "" {
 		return errf("bilinovel search page is unreachable")
 	}
+	// The guard lives on whichever host answered: the site has moved hosts
+	// before, and a redirect would silently drop cookies set for the old one.
+	guardURL, host := guardBase(page.FinalURL)
+	if host == "" {
+		return errf("bilinovel search page has no usable address")
+	}
 
-	if _, err := doGet(ctx, c, SearchURL+"?search_guard=css", map[string]string{
+	if _, err := doGet(ctx, c, guardURL+"?search_guard=css", map[string]string{
 		"accept":  "text/css,*/*;q=0.1",
-		"referer": SearchURL,
+		"referer": guardURL,
 	}); err != nil {
 		return err
 	}
 
-	js, err := doGet(ctx, c, SearchURL+"?search_guard=js", map[string]string{
+	js, err := doGet(ctx, c, guardURL+"?search_guard=js", map[string]string{
 		"accept":  "*/*",
-		"referer": SearchURL,
+		"referer": guardURL,
 	})
 	if err != nil {
 		return err
 	}
-	if m := regexp.MustCompile(`jieqiSearchJs=([^;"]+)`).FindStringSubmatch(js.Body); m != nil {
-		if u, err := url.Parse(BaseURL); err == nil {
+	// The script body assigns the token inline: `document.cookie="jieqiSearchJs=…; …"`.
+	if m := regexp.MustCompile(`jieqiSearchJs=([^;'"\s]+)`).FindStringSubmatch(js.Body); m != nil {
+		if u, perr := url.Parse(guardURL); perr == nil {
 			c.GetCookieJar().SetCookies(u, []*fhttp.Cookie{{
-				Name: "jieqiSearchJs", Value: m[1], Path: "/", Domain: u.Host,
+				Name: "jieqiSearchJs", Value: m[1], Path: "/", Domain: host,
 			}})
 		}
 	}
 
-	_, err = doGet(ctx, c, fmt.Sprintf("%s?search_guard=redeem&r=%d", SearchURL,
+	_, err = doGet(ctx, c, fmt.Sprintf("%s?search_guard=redeem&r=%d", guardURL,
 		time.Now().UnixMilli()), map[string]string{
 		"accept":  "*/*",
-		"referer": SearchURL,
+		"referer": guardURL,
 	})
 	return err
+}
+
+// guardBase derives the search-page address (scheme, host, and path) to run the
+// guard against from the URL the search page finally answered on.
+func guardBase(finalURL string) (pageURL, host string) {
+	m := pageAdressRe.FindStringSubmatch(finalURL)
+	if m == nil {
+		return SearchURL, ""
+	}
+	return m[1] + m[3], m[2]
 }
 
 type response struct {
@@ -208,7 +235,7 @@ func doSearchOnce(ctx context.Context, query string) (*Result, error) {
 	return parseResults(text), nil
 }
 
-// Search searches bilinovel.com, falling back to relaxed substring queries
+// Search searches bilinovel.net, falling back to relaxed substring queries
 // when the first search yields no results.
 func Search(ctx context.Context, query string) (*Result, error) {
 	result, err := doSearchOnce(ctx, query)
@@ -463,9 +490,14 @@ func similarity(a, b string) float64 {
 	return 2 * float64(dp[lb]) / float64(la+lb)
 }
 
+// NovelURL builds the canonical detail address of a novel id.
+func NovelURL(novelID string) string {
+	return BaseURL + "/novel/" + novelID + ".html"
+}
+
 // SearchNovelID extracts the novel id from a search URL.
 func SearchNovelID(u string) string {
-	m := regexp.MustCompile(`(?:linovelib|bilinovel)\.com/(?:novel|download)/(\d+)`).
+	m := regexp.MustCompile(`(?:linovelib|bilinovel)\.(?:com|net)/(?:novel|download)/(\d+)`).
 		FindStringSubmatch(u)
 	if m == nil {
 		return ""

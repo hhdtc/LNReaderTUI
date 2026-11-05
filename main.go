@@ -1,4 +1,4 @@
-// Command lnreadertui is a terminal-based EPUB library: search bilinovel.com
+// Command lnreadertui is a terminal-based EPUB library: search bilinovel.net
 // for novels, download them as EPUBs, read them locally, and keep per-book
 // reading progress.
 //
@@ -205,7 +205,7 @@ func usage() {
 	fmt.Fprint(os.Stderr, `Usage of lnreadertui:
 
   lnreadertui [flags]                     start the interactive TUI
-  lnreadertui search <query> [--json]     search bilinovel.com
+  lnreadertui search <query> [--json]     search bilinovel.net
   lnreadertui detail <query|id|url> [--json]
                                           book detail incl. volumes & chapters
   lnreadertui download <query|id|url> [--out PATH] [--json]
@@ -319,7 +319,7 @@ func resolveNovel(ctx context.Context, key string) (site.Book, error) {
 		return site.Book{URL: key}, nil
 	}
 	if isDigits(key) {
-		return site.Book{URL: "https://www.bilinovel.com/novel/" + key + ".html"}, nil
+		return site.Book{URL: site.NovelURL(key)}, nil
 	}
 	res, err := site.Search(ctx, key)
 	if err != nil {

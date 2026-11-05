@@ -26,7 +26,8 @@ import (
 //   - anti-scrape cleanup (junk tags, lazy-load images, unicode host obfuscation)
 //   - paragraph-shuffle restore driven by chapterlog.js template parameters
 
-const downloadDomain = "https://www.bilinovel.com"
+// downloadDomain is the host the site serves content from (moved from .com).
+const downloadDomain = "https://www.bilinovel.net"
 
 const downloadUA = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 " +
 	"(KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
@@ -131,7 +132,7 @@ type NovelBundle struct {
 	Chapters []Chapter
 }
 
-// Downloader fetches novel content and images from bilinovel.com.
+// Downloader fetches novel content and images from bilinovel.net.
 type Downloader struct {
 	client       tlsclient.HttpClient
 	textLimiter  *RateLimiter

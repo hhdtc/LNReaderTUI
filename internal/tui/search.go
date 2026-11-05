@@ -206,7 +206,7 @@ type searchDetail struct {
 func newSearchView(dl *site.Downloader) *searchView {
 	v := &searchView{state: searchIdle, searchFn: site.Search, dl: dl}
 	v.input = textinput.New()
-	v.input.Placeholder = "search bilinovel.com… (results appear as you type)"
+	v.input.Placeholder = "search bilinovel.net… (results appear as you type)"
 	v.input.Prompt = "> "
 	v.input.Width = 60
 	v.input.Focus()
@@ -529,7 +529,7 @@ func (v *searchView) View(width, height int) string {
 		return v.detailView(width, height)
 	}
 	parts := []string{}
-	parts = append(parts, titleStyle.Render("Online search — bilinovel.com"))
+	parts = append(parts, titleStyle.Render("Online search — bilinovel.net"))
 	parts = append(parts, v.input.View())
 	switch v.state {
 	case searchSearching:
