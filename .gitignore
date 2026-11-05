@@ -2,3 +2,9 @@
 *.exe
 /data
 /dist
+
+# DSH plugin dev artifacts
+/.parity/
+/dsh-plugin/.reacttest/
+/dsh-plugin/.dsh/
+/dsh-plugin/.chrome-test/

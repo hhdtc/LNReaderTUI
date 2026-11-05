@@ -1,0 +1,26 @@
+{
+ "title": "月之珊瑚",
+ "author": "奈须蘑菇",
+ "chapters": [
+  {
+   "title": "第一章",
+   "paragraphs": 95,
+   "sha256": "346a73e2b436bfa140bc548b10caed8cbccac5664a474217cbe0bee84085deff"
+  },
+  {
+   "title": "第二章",
+   "paragraphs": 182,
+   "sha256": "fba784c929c851cfdea85810bc8a672fe13e542f52f05e427337c63bf683aa1c"
+  },
+  {
+   "title": "第三章",
+   "paragraphs": 230,
+   "sha256": "020bcfd3b5ac0cf6f0ed37413ced6e297432c668e00bcbeab127065bbdea9cfb"
+  },
+  {
+   "title": "第四章",
+   "paragraphs": 62,
+   "sha256": "5a5c40ec15952fe894843f87d3b896a109e425e2ba4a8478fcc8bf5a3872478d"
+  }
+ ]
+}

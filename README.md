@@ -1,6 +1,6 @@
 # LNReaderTUI
 
-一个终端里的轻小说阅读器。搜索 **bilinovel.com** 的小说，一键下载为 EPUB，在终端里阅读，并自动记录每一本书的阅读进度——全部运行在你自己的机器上。
+一个终端里的轻小说阅读器。搜索 **bilinovel.net** 的小说，一键下载为 EPUB，在终端里阅读，并自动记录每一本书的阅读进度——全部运行在你自己的机器上。
 
 基于 [bubbletea](https://github.com/charmbracelet/bubbletea) 构建；站点抓取逻辑移植自 [bili_novel_packer](https://github.com/montaro2017/bili_novel_packer)。
 
@@ -24,7 +24,7 @@
 - 列表展示标题、作者、章节总数，以及**章节级阅读进度**：`1/4 chapters · 第一章 2%`
 - 删除图书（`d`）、重置进度（`x`）、本地过滤（`/`）
 
-### 🔍 搜索（bilinovel.com）
+### 🔍 搜索（bilinovel.net）
 - **输入即搜**：输入稳定 500ms 后自动搜索（去抖、过期请求自动取消、结果实时更新）
 - 结果列表 → **Enter 打开书籍详情页**：作者、出版社、状态、评分、标签、完整简介，以及**卷/章结构**（如 `玩乐关系 1 — 15 章`、章节标题预览）；详情页支持滚动
 
@@ -146,6 +146,18 @@ lnreadertui detail "$QUERY" --json
 lnreadertui download "$QUERY"              # 完成后打印书库路径
 lnreadertui books list --json              # 验证已入库并查看进度
 ```
+
+## DSH 插件（Web 界面）
+
+[`dsh-plugin/`](dsh-plugin/README.md) 是 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web 界面里的小说面板：**左侧栏书本图标**打开书库与在线阅读器，与终端版共用同一个数据目录、同一份阅读进度（终端读到第 3/37 章，浏览器里打开就是同一位置）。搜索 / 详情 / 下载 / 更新调用本机的 `lnreadertui`，书库与进度直接读写 `library.json`，章节解析与 `internal/epub/reader.go` 逐段对齐。
+
+```bash
+# 在本仓库目录下安装到 web profile（也可在 Web 的 Plugins 页面里安装本目录）
+dsh plugin --profile web add link:"$PWD/dsh-plugin"
+# 然后在 Plugins 页面启用 dsh-novel-reader，或把它加入 profile 的 dsh.profile.bundles
+```
+
+刷新浏览器页面后左侧栏出现「小说」入口。详见 [插件说明](dsh-plugin/README.md)。
 
 ## 快捷键
 

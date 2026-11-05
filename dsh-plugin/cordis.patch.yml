@@ -1,0 +1,19 @@
+# The novel-reader bundle layer: one dual-face row. Its host half registers the
+# panel's HTTP routes; its browser half is discovered from this package's
+# `dsh.client` declaration and appears as a left-sidebar entry.
+#
+# Optional row configuration (uncomment and edit to override the defaults):
+#
+#   - id: ui-novel-reader
+#     name: dsh-novel-reader
+#     config:
+#       dataDir: /home/you/.local/share/lnreadertui
+#       bin: /usr/local/bin/lnreadertui
+#
+# Defaults: the LNReaderTUI data directory for this platform (or
+# $LNREADERTUI_DATA_DIR), and `lnreadertui` resolved from PATH (or
+# $LNREADERTUI_BIN).
+
+- insert:
+    - id: ui-novel-reader
+      name: dsh-novel-reader

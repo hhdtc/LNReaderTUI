@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<title>pagination harness</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #fff; color: #111; }
+  #reader { display: block; box-sizing: border-box; }
+  #report { margin: 8px; font: 12px/1.4 monospace; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<div id="reader"></div>
+<pre id="report">pending</pre>
+<script src="/react.js"></script>
+<script src="/react-dom.js"></script>
+<script>
+  // The plugin bundle expects the DSH module loader, a same-origin API, and a
+  // theme; stub exactly those three so the real Reader component runs here.
+  window.__loaderErrors = [];
+  window.addEventListener('error', (event) => window.__loaderErrors.push(String(event.message)));
+  window.__ModuleLoader__ = { load: (entry) => { window.__pluginEntry = entry; } };
+  // The plugin's API transport is stubbed below; keep a real one for reporting.
+  const reportFetch = window.fetch.bind(window);
+  const harnessLog = (step, detail) => {
+    try { reportFetch('/log', { method: 'POST', body: JSON.stringify({ step, ...detail }) }).catch(() => {}); } catch { /* ignore */ }
+  };
+
+  const PARAGRAPHS = Array.from({ length: 90 }, (_, i) => (
+    `第${i + 1}段。` + '月は珊瑚のように静かに沈み、誰も知らない物語が頁の上でゆっくりと積み重なっていく。'.repeat(2)
+  ));
+  const BOOK = {
+    id: 'harness', title: '分页校验', author: 'harness', chapters: 3,
+    progress: { chapterIndex: 0, offset: 0.4, chapterTitle: '第一章', lastReadAt: '2026-11-05T00:00:00Z' },
+  };
+  const CHAPTERS = [0, 1, 2].map((index) => ({ index, title: `第${index + 1}章` }));
+  window.__saved = [];
+
+  window.fetch = async (url, init) => {
+    const path = String(url).replace('/novel-reader/api', '');
+    const body = (payload) => ({ ok: true, status: 200, statusText: 'OK', json: async () => payload });
+    if (path === '/books/harness/chapters') return body({ chapters: CHAPTERS, progress: BOOK.progress, book: BOOK });
+    const chapter = /^\/books\/harness\/chapter\/(\d+)$/.exec(path);
+    if (chapter !== null) {
+      const index = Number(chapter[1]);
+      return body({
+        id: BOOK.id, bookTitle: BOOK.title, index, total: 3,
+        title: CHAPTERS[index].title, paragraphs: PARAGRAPHS, truncated: false, progress: BOOK.progress,
+      });
+    }
+    if (path.endsWith('/progress')) {
+      try { window.__saved.push(JSON.parse(init.body)); } catch { /* ignore */ }
+      return body({ progress: {} });
+    }
+    if (path === '/status') return body({ dataDir: '/tmp', cli: { available: true, path: 'x', version: 'dev' }, books: 1 });
+    if (path === '/books') return body({ books: [BOOK] });
+    return body({});
+  };
+
+  // Minimal theme values so the stylesheet resolves instead of falling back to
+  // empty strings.
+  document.documentElement.style.setProperty('--dsh-frame-top-clearance', '0px');
+</script>
+<script src="/client.js"></script>
+<script>
+  (async () => {
+    const report = { ok: false, steps: [] };
+    const fail = (message) => { report.steps.push({ step: 'fail', message }); finish(); };
+    const finish = () => {
+      const text = JSON.stringify(report, null, 1);
+      document.getElementById('report').textContent = text;
+      document.title = report.ok ? 'PASS' : 'FAIL';
+      // Hand the measurements to the harness server so a runner can assert on
+      // them without shipping the whole page source.
+      try {
+        reportFetch('/report', { method: 'POST', body: JSON.stringify(report) }).catch(() => {});
+      } catch {
+        /* a file:// load has nowhere to report */
+      }
+    };
+    const frame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+    try {
+      const entry = window.__pluginEntry;
+      if (!entry) return fail('plugin bundle did not register');
+      const plugin = entry.factory((id) => {
+        if (id === 'react') return React;
+        throw new Error(`unexpected require ${id}`);
+      });
+      const registrations = [];
+      plugin.apply({
+        effect: (body) => { body(); return () => {}; },
+        slots: { inject: (name, body) => body(), register: (options, component) => { registrations.push({ options, component }); return () => {}; } },
+      });
+      if (document.querySelector('style[data-novel-reader]') === null) return fail('plugin styles missing');
+      report.steps.push({ step: 'applied', registrations: registrations.map((item) => item.options.name) });
+
+      const container = document.getElementById('reader');
+      // The panel width varies; drive the harness size from the URL.
+      const params = new URLSearchParams(location.search);
+      container.style.width = `${Number(params.get('w')) || 1200}px`;
+      container.style.height = `${Number(params.get('h')) || 700}px`;
+      report.size = { width: container.style.width, height: container.style.height };
+      const root = ReactDOM.createRoot(container);
+      root.render(React.createElement(plugin.Reader, {
+        book: BOOK,
+        initialChapter: 0,
+        initialOffset: 0.4,
+        onExit: () => {},
+      }));
+      await frame();
+      await frame();
+
+      const viewport = container.querySelector('.nr-reader-viewport');
+      const clip = container.querySelector('.nr-page-clip');
+      const flow = container.querySelector('.nr-reader-flow');
+      const article = container.querySelector('.nr-article');
+      if (!viewport || !clip || !flow || !article) return fail('reader DOM missing');
+
+      const readPages = () => {
+        const hint = container.querySelector('.nr-page-hint');
+        const match = hint && /\/\s*(\d+)/.exec(hint.textContent);
+        return match ? Number(match[1]) : 0;
+      };
+      const pages = readPages();
+      report.pages = pages;
+      report.paragraphs = article.querySelectorAll('p').length;
+      if (pages < 2) return fail(`expected a multi-page chapter, got ${pages}`);
+      if (report.paragraphs < 2) return fail('chapter had no paragraphs');
+
+      const columnWidth = flow.clientWidth;
+      const columnGap = Number.parseFloat(getComputedStyle(flow).columnGap) || 0;
+      const stripWidth = flow.scrollWidth;
+      report.columnWidth = columnWidth;
+      report.columnGap = columnGap;
+      report.stripWidth = stripWidth;
+      report.expectedStripWidth = pages * (columnWidth + columnGap) - columnGap;
+      if (Math.abs(report.stripWidth - report.expectedStripWidth) > 2) {
+        return fail(`strip width ${report.stripWidth} does not match ${report.expectedStripWidth} for ${pages} pages`);
+      }
+
+      // 1) The reading area never scrolls: no vertical overflow means no line is
+      //    parked below the visible box.
+      const verticalOverflow = viewport.scrollHeight - viewport.clientHeight;
+      report.verticalOverflow = verticalOverflow;
+      if (verticalOverflow > 0) return fail(`viewport overflows vertically by ${verticalOverflow}px`);
+
+      // 1b) Exactly one page column may be visible: the frame is one column wide
+      //     and the current page sits fully inside it, so no neighbouring column
+      //     can bleed into the reading area (which is how half lines appear at
+      //     the left or right edge).
+      const clipWidth = clip.clientWidth;
+      report.clipWidth = clipWidth;
+      if (clipWidth > columnWidth + 1) return fail(`page frame is ${clipWidth}px wide for ${columnWidth}px columns`);
+      const clipRect = clip.getBoundingClientRect();
+      const flowRect0 = flow.getBoundingClientRect();
+      const showingPage = Number((container.querySelector('.nr-page-hint')?.textContent ?? '1 / 1').split('/')[0].trim()) - 1;
+      const currentColumnLeft = flowRect0.left + showingPage * (columnWidth + columnGap);
+      const currentColumnRight = currentColumnLeft + columnWidth;
+      report.columnWindow = {
+        page: showingPage + 1,
+        left: Math.round(currentColumnLeft - clipRect.left),
+        right: Math.round(currentColumnRight - clipRect.right),
+      };
+      if (currentColumnLeft < clipRect.left - 1 || currentColumnRight > clipRect.right + 1) {
+        return fail(`page ${showingPage + 1} is not inside the page frame (offset ${report.columnWindow.left}px)`);
+      }
+
+      // 2) Every line box on the first page must sit fully inside the column.
+      const columnHeight = flow.clientHeight;
+      const measureClipping = (pageIndex) => {
+        const flowRect = flow.getBoundingClientRect();
+        const top = flowRect.top;
+        const bottom = top + columnHeight;
+        const range = document.createRange();
+        range.selectNodeContents(article);
+        const rects = [...range.getClientRects()];
+        let checked = 0;
+        let clipped = 0;
+        for (const rect of rects) {
+          if (rect.width <= 0 || rect.height <= 0) continue;
+          // Only lines belonging to the examined page (they are laid out in the
+          // strip's own coordinate space, so compare against the page window).
+          const pageLeft = flowRect.left + pageIndex * (columnWidth + columnGap);
+          const pageRight = pageLeft + columnWidth;
+          if (rect.right <= pageLeft + 0.5 || rect.left >= pageRight - 0.5) continue;
+          checked += 1;
+          if (rect.top < top - 0.5 || rect.bottom > bottom + 0.5) clipped += 1;
+        }
+        return { checked, clipped };
+      };
+      const first = measureClipping(0);
+      report.firstPageLines = first;
+      if (first.checked === 0) return fail('no line boxes measured on the first page');
+      if (first.clipped > 0) return fail(`${first.clipped} line(s) cross the page edge`);
+
+      // 3) A page flip advances by exactly one column span and keeps the box intact.
+      const before = flow.getBoundingClientRect().left;
+      const hintBefore = container.querySelector('.nr-page-hint').textContent;
+      const viewportRect = viewport.getBoundingClientRect();
+      viewport.dispatchEvent(new MouseEvent('click', {
+        bubbles: true,
+        clientX: viewportRect.left + viewportRect.width * 0.9,
+        clientY: viewportRect.top + viewportRect.height * 0.5,
+      }));
+      await frame();
+      const hintAfter = container.querySelector('.nr-page-hint').textContent;
+      const after = flow.getBoundingClientRect().left;
+      report.flip = { hintBefore, hintAfter, dx: Math.round(before - after), expectedDx: columnWidth + columnGap };
+      if (hintBefore === hintAfter) return fail('clicking the right third did not turn the page');
+      if (Math.abs((before - after) - (columnWidth + columnGap)) > 2) {
+        return fail(`page advanced by ${Math.round(before - after)}px instead of ${columnWidth + columnGap}px`);
+      }
+      const second = measureClipping(1);
+      report.secondPageLines = second;
+      if (second.checked === 0) return fail('no line boxes measured on the second page');
+      if (second.clipped > 0) return fail(`${second.clipped} line(s) cross the page edge after the flip`);
+
+      // 4) Position is stored as a page fraction: the restored page is
+      //    round(offset * (pages - 1)), so a flip stores the page after it.
+      await frame();
+      report.saved = window.__saved.slice(-1);
+      const startPage = Math.round(0.4 * (pages - 1));
+      const flippedPage = Math.round((Number(report.flip.hintAfter.split('/')[0].trim()) || 1) - 1);
+      const expectedOffset = flippedPage / (pages - 1);
+      report.expectedOffset = expectedOffset;
+      if (report.saved.length === 0) return fail('no progress write observed');
+      if (Math.abs(report.saved[0].offset - expectedOffset) > 0.02) {
+        return fail(`saved offset ${report.saved[0].offset} is not the page fraction ${expectedOffset}`);
+      }
+      if (report.flip.hintBefore !== `${startPage + 1} / ${pages}`) {
+        return fail(`restored to ${report.flip.hintBefore} instead of page ${startPage + 1} of ${pages} for offset 0.4`);
+      }
+
+      // 5) Walk every remaining page: each flip must land on the next page, every
+      //    page must be line-aligned, and one more flip must change chapter.
+      const hintText = () => container.querySelector('.nr-page-hint').textContent.trim();
+      const pageIndex = () => Number(hintText().split('/')[0].trim()) - 1;
+      let clippedPages = 0;
+      let visits = 0;
+      let index = pageIndex();
+      harnessLog('walk-start', { hint: hintText(), pages });
+      while (index < pages - 1) {
+        viewport.dispatchEvent(new MouseEvent('click', {
+          bubbles: true,
+          clientX: viewportRect.left + viewportRect.width * 0.9,
+          clientY: viewportRect.top + viewportRect.height * 0.5,
+        }));
+        await frame();
+        const measured = measureClipping(index);
+        visits += 1;
+        if (measured.clipped > 0) {
+          clippedPages += 1;
+          harnessLog('clipped', { page: index, measured });
+        }
+        const nextIndex = pageIndex();
+        if (nextIndex !== index + 1) {
+          harnessLog('skipped', { from: index, to: nextIndex });
+          return fail(`flip from page ${index} landed on ${nextIndex}`);
+        }
+        index = nextIndex;
+      }
+      report.lastHint = hintText();
+      report.clippedPages = clippedPages;
+      report.pagesVisited = visits;
+      harnessLog('walk-end', { hint: hintText(), visits, clippedPages });
+      if (clippedPages > 0) return fail(`${clippedPages} page(s) clip a line`);
+      if (index !== pages - 1) return fail(`walk ended on page ${index + 1} of ${pages}`);
+
+      // 6) One more flip at the last page opens the next chapter at its first page.
+      const chapterBefore = container.querySelector('.nr-reader-chapter').textContent;
+      viewport.dispatchEvent(new MouseEvent('click', {
+        bubbles: true,
+        clientX: viewportRect.left + viewportRect.width * 0.9,
+        clientY: viewportRect.top + viewportRect.height * 0.5,
+      }));
+      await frame();
+      await frame();
+      const chapterAfter = container.querySelector('.nr-reader-chapter').textContent;
+      report.chapterTurn = { before: chapterBefore, after: chapterAfter, hint: hintText() };
+      harnessLog('chapter-turn', report.chapterTurn);
+      if (chapterBefore === chapterAfter) return fail('a flip at the last page did not change chapter');
+      if (pageIndex() !== 0) return fail(`the next chapter opened on page ${pageIndex() + 1} instead of 1`);
+
+      root.unmount();
+      report.ok = true;
+      finish();
+    } catch (error) {
+      report.steps.push({ step: 'error', message: String(error && error.stack || error) });
+      finish();
+    }
+  })();
+</script>
+</body>
+</html>
