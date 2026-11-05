@@ -11,11 +11,11 @@ pipeline emit the artifact winget needs.
 
 - **`.github/workflows/release.yml`** now also produces `lnreadertui-windows-amd64.zip` (containing
   `lnreadertui.exe`) for every tagged release, so winget can expose a clean `lnreadertui` command.
-- **`winget/manifests/h/hhdtc/LNReaderTUI/1.1.1/`** — the manifest set using
+- **`winget/manifests/h/hhdtc/LNReaderTUI/1.1.6/`** — the manifest set using
   `InstallerType: zip` + `NestedInstallerType: portable` + `PortableCommandAlias: lnreadertui`.
 
 ```
-winget/manifests/h/hhdtc/LNReaderTUI/1.1.1/
+winget/manifests/h/hhdtc/LNReaderTUI/1.1.6/
 ├── hhdtc.LNReaderTUI.yaml                  # version manifest
 ├── hhdtc.LNReaderTUI.installer.yaml        # installer manifest (zip + portable + alias)
 └── hhdtc.LNReaderTUI.locale.en-US.yaml     # default (en-US) locale manifest
@@ -23,36 +23,31 @@ winget/manifests/h/hhdtc/LNReaderTUI/1.1.1/
 
 > The community repo forbids singleton manifests — submit the full multi-file set.
 
-## The one thing still needed
+## Keeping the manifest current
 
-The `InstallerSha256` in the installer manifest is a placeholder. Winget-pkgs validates the hash of the
-download, so it must equal the SHA-256 of the actual released zip. The zip does not exist until a release
-runs the (updated) build:
+The manifest directory here mirrors what was submitted upstream and carries the real released hashes, so
+each new version follows the same three steps:
 
-1. **Push `.github/workflows/release.yml`** to your default branch.
-2. **Cut a release** so the zip is built — e.g. tag `v1.1.1` (`git tag v1.1.1 && git push origin v1.1.1`).
-   `dist/*` will now include `lnreadertui-windows-amd64.zip`.
-3. **Get the zip's SHA-256** (GitHub shows a `sha256:` digest on each release asset — that is the value to use):
-   ```powershell
-   (Get-FileHash lnreadertui-windows-amd64.zip -Algorithm SHA256).Hash
-   ```
-4. **Put it in the manifest** at
-   `winget/manifests/h/hhdtc/LNReaderTUI/1.1.1/hhdtc.LNReaderTUI.installer.yaml`,
-   replacing `PLACEHOLDER-REPLACE-AFTER-v1.1.1-RELEASE`.
-5. **Submit the PR** (see below).
+1. **Cut the release first** — `git tag vX.Y.Z && git push origin vX.Y.Z` builds `dist/*`, including
+   `lnreadertui-windows-<arch>.zip`.
+2. **Take the zip's SHA-256** from the release asset digest (or `sha256sum` after downloading) and write it
+   into `winget/manifests/h/hhdtc/LNReaderTUI/vX.Y.Z/hhdtc.LNReaderTUI.installer.yaml`.
+3. **Open the upstream PR** (see below) with the new version directory.
+
+`1.1.6` ships `x64` and `arm64` installers, both verified against the published release assets.
 
 ## Steps to submit to winget-pkgs
 
 1. Confirm there is no other **open PR** for the same package/version.
-2. Fork `microsoft/winget-pkgs` and copy exactly `manifests/h/hhdtc/LNReaderTUI/1.1.1/` into the fork.
+2. Fork `microsoft/winget-pkgs` and copy exactly `manifests/h/hhdtc/LNReaderTUI/1.1.6/` into the fork.
 3. Validate locally:
    ```powershell
-   winget validate --manifest winget/manifests/h/hhdtc/LNReaderTUI/1.1.1
+   winget validate --manifest winget/manifests/h/hhdtc/LNReaderTUI/1.1.6
    ```
 4. Test the install (run as Administrator):
    ```powershell
    winget settings --enable LocalManifestFiles
-   winget install --manifest winget/manifests/h/hhdtc/LNReaderTUI/1.1.1
+   winget install --manifest winget/manifests/h/hhdtc/LNReaderTUI/1.1.6
    ```
    > ⚠️ LNReaderTUI is a bubbletea TUI and needs a VT terminal such as **Windows Terminal**; it will not
    > render correctly in classic `cmd.exe`. The install still succeeds; this only affects how it looks.
@@ -102,6 +97,6 @@ a new PR).
 ## Caveats
 
 - **Security scans / PUA risk.** Every winget-pkgs package is scanned (VirusTotal etc.). LNReaderTUI uses
-  `fhttp` / `tls-client` to fingerprint Chrome TLS and scrapes bilinovel.com. Inspectors may flag the
+  `fhttp` / `tls-client` to fingerprint Chrome TLS and scrapes bilinovel.net. Inspectors may flag the
   fingerprint-spoofing behavior even though the app is legitimate; acceptance is not guaranteed.
 - **Publisher match.** `Publisher` must match the publisher segment of the identifier (`hhdtc`).
