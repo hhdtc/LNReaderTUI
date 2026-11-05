@@ -136,3 +136,22 @@ func TestDiffCatalogReorderedAborts(t *testing.T) {
 		t.Fatal("expected abort on reordered catalog")
 	}
 }
+
+// TestDiffCatalogSkipsUntitledListingEntry: an untitled listing entry (an
+// image-only chapter, for example) cannot confirm its position, so it must not
+// abort the update by comparison against a synthesized name.
+func TestDiffCatalogSkipsUntitledListingEntry(t *testing.T) {
+	remote := []site.VolumeRef{vol("卷", ch("插图"), ch(""), ch("【第二话】概要女王的败北（Day58）"))}
+	if _, _, _, err := diffCatalog([]string{"插图", "第 2 章", "【第二话】概要女王的败北（Day58）"}, remote); err != nil {
+		t.Fatalf("untitled listing entry aborted the update: %v", err)
+	}
+}
+
+// TestDiffCatalogUntitledCatalogAborts: when the listing titles nothing, the
+// prefix is unverifiable and a blind append must not happen.
+func TestDiffCatalogUntitledCatalogAborts(t *testing.T) {
+	remote := []site.VolumeRef{vol("卷", ch(""), ch(""), ch(""))}
+	if _, _, _, err := diffCatalog([]string{"插图", "概述", "结语"}, remote); err == nil {
+		t.Fatal("expected abort when the catalog titles nothing")
+	}
+}

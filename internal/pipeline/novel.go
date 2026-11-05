@@ -308,6 +308,9 @@ func volumeAt(volumes []site.VolumeRef, pos int) string {
 //
 // The remote catalog must be a strict prefix extension of the local book;
 // any divergence aborts (the reader-side index match would be unreliable).
+// A listing entry the site leaves untitled cannot confirm or deny its
+// position, so that position is skipped — but a catalog that titles nothing
+// aborts, because then the whole prefix is unverifiable.
 func diffCatalog(localTitles []string, remote []site.VolumeRef) (int, []site.ChapterRef, []epub.VolumeRef, error) {
 	var flat []site.ChapterRef
 	for _, v := range remote {
@@ -318,10 +321,13 @@ func diffCatalog(localTitles []string, remote []site.VolumeRef) (int, []site.Cha
 			"site catalog has %d chapters; local book has %d — cannot append",
 			len(flat), len(localTitles))
 	}
+	checked := 0
 	for i, t := range localTitles {
 		expect := strings.TrimSpace(flat[i].Title)
 		if expect == "" {
-			expect = fmt.Sprintf("第 %d 章", i+1)
+			// Image-only chapters and a few list pages carry no title at all;
+			// there is nothing to compare at this position.
+			continue
 		}
 		if !catalogTitleMatches(t, expect) {
 			return 0, nil, nil, fmt.Errorf(
@@ -329,6 +335,12 @@ func diffCatalog(localTitles []string, remote []site.VolumeRef) (int, []site.Cha
 					"the chapter list no longer matches this book, so re-download it if the site really renamed chapters",
 				i+1, expect, t)
 		}
+		checked++
+	}
+	if len(localTitles) > 0 && checked == 0 {
+		return 0, nil, nil, fmt.Errorf(
+			"site catalog listed %d chapters without titles; update aborted — "+
+				"the chapter list cannot be verified against this book", len(flat))
 	}
 	// The volume layout is the remote one: chapters are contiguous, so the
 	// nav grouping walks volumes by count regardless of the local/new split.
