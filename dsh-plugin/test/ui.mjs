@@ -58,7 +58,7 @@ const act = React.act ?? (await import(pathToFileURL(join(devModules, 'react-dom
 /** Requests the fake API received, in order. */
 const calls = [];
 /** Reader presentation settings the fake host keeps between requests. */
-let settings = { theme: 'nerv', font: 'serif', size: 17, ink: '#d8d8d0', paper: '#080807' };
+let settings = { theme: 'nerv', font: 'serif', size: 17, ink: '#d8d8d0', paper: '#080807', margin: 36 };
 const savedSettings = [];
 const savedProgress = [];
 
@@ -323,12 +323,28 @@ await step('reading settings apply live and persist through the host', async () 
   await click(findButton('Aa'));
   await flush(10);
   assert.ok(popover() !== null, 'settings popover did not open');
-  for (const label of ['主题', '字体', '字号', '字色', '背景']) {
+  for (const label of ['主题', '字体', '字号', '边距', '字色', '背景']) {
     assert.ok(popover().textContent.includes(label), `popover misses ${label}`);
   }
 
+  // The popover is pinned to the top-right of the reading surface.
+  assert.equal(popover().style.position || '', '', 'popover should be positioned by the stylesheet');
+  assert.ok(popover().classList.contains('nr-pop'), 'popover lost its class');
+
+  // Page margin: the second range input drives the column inset.
+  const ranges = popover().querySelectorAll('.nr-range');
+  assert.equal(ranges.length, 2, 'expected a size and a margin slider');
+  const setNative = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+  await act(async () => {
+    setNative.call(ranges[1], '96');
+    ranges[1].dispatchEvent(new window.Event('input', { bubbles: true }));
+  });
+  await flush(520);
+  assert.equal(container.querySelector('.nr-reader').style.getPropertyValue('--nr-inset'), '96px');
+  assert.ok(savedSettings.some((patch) => patch.margin === 96), 'page margin was not persisted');
+
   // Font size: the slider drives the CSS variable and a re-page.
-  const range = popover().querySelector('.nr-range');
+  const range = popover().querySelectorAll('.nr-range')[0];
   // React tracks the previous value, so assign through the native setter.
   const setValue = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
   await act(async () => {

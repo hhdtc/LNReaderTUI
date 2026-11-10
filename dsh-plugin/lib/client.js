@@ -99,6 +99,7 @@ window.__ModuleLoader__.load({
       readerEnd: '本章完',
       readerSettings: '阅读设置',
       fullscreen: '全屏',
+      pageMargin: '边距',
       theme: '主题',
       font: '字体',
       fontSize: '字号',
@@ -193,6 +194,7 @@ window.__ModuleLoader__.load({
       readerEnd: 'End of chapter',
       readerSettings: 'Reading settings',
       fullscreen: 'Fullscreen',
+      pageMargin: 'Margin',
       theme: 'Theme',
       font: 'Font',
       fontSize: 'Size',
@@ -371,8 +373,7 @@ window.__ModuleLoader__.load({
       .nr-range{flex:1;min-width:90px;accent-color:var(--nr-orange,#ff9830)}
       .nr-btn--tiny{padding:1px 7px;font-size:13px;line-height:1.2}
       .nr-page{box-sizing:border-box;height:100%;display:flex;flex-direction:column;color:var(--dsw-alias-label-primary);
-        min-height:0}
-        font-size:14px;line-height:1.5;--nr-inset:clamp(16px,3vw,32px)}
+        font-size:14px;line-height:1.5;min-height:0;--nr-inset:clamp(16px,3vw,32px)}
       .nr-head{flex:none;display:flex;flex-direction:column;gap:10px;padding:calc(20px + var(--dsh-frame-top-clearance,0px)) var(--nr-inset) 10px;
         border-bottom:.5px solid var(--dsw-alias-border-l3);background:var(--dsw-alias-bg-base);position:relative;z-index:2}
       .nr-title-row{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
@@ -873,9 +874,20 @@ window.__ModuleLoader__.load({
       sepia: { ink: '#4a3b2a', paper: '#f1e3c8' },
       night: { ink: '#c9cfd8', paper: '#12131a' },
     };
-    const READER_DEFAULT = { theme: 'nerv', font: 'serif', size: 17, ink: '#d8d8d0', paper: '#080807' };
+    const READER_DEFAULT = { theme: 'nerv', font: 'serif', size: 17, ink: '#d8d8d0', paper: '#080807', margin: 36 };
+    /** Page margin bounds, in CSS pixels, mirrored by the host's clamp. */
+    const READER_MARGIN = { min: 8, max: 120 };
+    /** Vertical inset for a given page margin: half of it, kept sane. */
+    const pageInsetY = (margin) => Math.max(8, Math.min(40, Math.round(margin / 2)));
     /** Widest line measure a page may use, so a wide panel does not stretch lines. */
     const READER_MAX_MEASURE = 860;
+    /**
+     * Reading measure for one page margin: the default margin keeps the full
+     * 860 px measure, and every extra pixel of margin narrows the text column
+     * (so the control stays meaningful on wide panels where the cap alone would
+     * absorb any inset).
+     */
+    const measureForMargin = (margin) => Math.round(Math.max(360, READER_MAX_MEASURE - (margin - READER_DEFAULT.margin) * 1.6));
     const READER_PAD_X = 36;
     const READER_PAD_Y = 10;
 
@@ -968,13 +980,15 @@ window.__ModuleLoader__.load({
         if (viewport === null || clip === null || flow === null) return;
         const availableWidth = Math.max(240, viewport.clientWidth);
         const availableHeight = Math.max(160, viewport.clientHeight);
-        const width = Math.max(180, Math.min(availableWidth - READER_PAD_X * 2, READER_MAX_MEASURE));
-        const height = Math.max(120, availableHeight - READER_PAD_Y * 2);
+        const padX = Math.max(READER_MARGIN.min, Math.min(READER_MARGIN.max, Number(view.margin) || READER_DEFAULT.margin));
+        const padY = pageInsetY(padX);
+        const width = Math.max(180, Math.min(availableWidth - padX * 2, measureForMargin(padX)));
+        const height = Math.max(120, availableHeight - padY * 2);
         // The frame is exactly one page wide, so only this page's column shows.
         clip.style.width = `${width}px`;
         clip.style.height = `${height}px`;
-        clip.style.left = `${Math.max(READER_PAD_X, Math.round((availableWidth - width) / 2))}px`;
-        clip.style.top = `${READER_PAD_Y}px`;
+        clip.style.left = `${Math.max(padX, Math.round((availableWidth - width) / 2))}px`;
+        clip.style.top = `${padY}px`;
         flow.style.width = `${width}px`;
         flow.style.height = `${height}px`;
         flow.style.columnWidth = `${width}px`;
@@ -998,9 +1012,13 @@ window.__ModuleLoader__.load({
         if (mode === 'first' || mode === 'last') {
           fractionRef.current = pages <= 1 ? 0 : target / (pages - 1);
         }
+        // Keep the reader chrome on the text column's edge, not on the window's.
+        if (readerRef.current !== null) {
+          readerRef.current.style.setProperty('--nr-inset', `${Math.max(padX, Math.round((availableWidth - width) / 2))}px`);
+        }
         setLayout({ width, height, pages });
         setCurrentPage(target);
-      }, [view.size, view.font]);
+      }, [view.size, view.font, view.margin]);
 
       /** Persist the current chapter and page fraction; a repeated save is skipped. */
       const save = React.useCallback((immediate) => {
@@ -1241,6 +1259,7 @@ window.__ModuleLoader__.load({
           '--nr-font-size': `${view.size}px`,
           '--nr-ink': view.ink,
           '--nr-paper': view.paper,
+          '--nr-inset': `${Math.max(READER_MARGIN.min, Math.min(READER_MARGIN.max, Number(view.margin) || READER_DEFAULT.margin))}px`,
         },
       }, [
         h('header', { key: 'head', className: 'nr-reader-head' }, [
@@ -1337,6 +1356,35 @@ window.__ModuleLoader__.load({
                 title: '+',
               }, '+'),
               h('span', { key: 'value', className: 'nr-pop-value' }, `${view.size}px`),
+            ]),
+            h('div', { key: 'margin', className: 'nr-pop-row' }, [
+              h('span', { key: 'label', className: 'nr-pop-label' }, t('pageMargin')),
+              h('button', {
+                key: 'minus',
+                type: 'button',
+                className: 'nr-btn nr-btn--tiny',
+                onClick: () => onSettings?.({ margin: Math.max(READER_MARGIN.min, (Number(view.margin) || READER_DEFAULT.margin) - 4) }),
+                title: '−',
+              }, '−'),
+              h('input', {
+                key: 'range',
+                type: 'range',
+                className: 'nr-range',
+                min: READER_MARGIN.min,
+                max: READER_MARGIN.max,
+                step: 2,
+                value: Number(view.margin) || READER_DEFAULT.margin,
+                onChange: (event) => onSettings?.({ margin: Number(event.target.value) }),
+                'aria-label': t('pageMargin'),
+              }),
+              h('button', {
+                key: 'plus',
+                type: 'button',
+                className: 'nr-btn nr-btn--tiny',
+                onClick: () => onSettings?.({ margin: Math.min(READER_MARGIN.max, (Number(view.margin) || READER_DEFAULT.margin) + 4) }),
+                title: '+',
+              }, '+'),
+              h('span', { key: 'value', className: 'nr-pop-value' }, `${Number(view.margin) || READER_DEFAULT.margin}px`),
             ]),
             h('div', { key: 'ink', className: 'nr-pop-row' }, [
               h('span', { key: 'label', className: 'nr-pop-label' }, t('textColor')),

@@ -19,6 +19,7 @@ export const READER_DEFAULTS = Object.freeze({
   size: 17,
   ink: '#d8d8d0',
   paper: '#080807',
+  margin: 36,
 });
 
 /** Font choices the client offers; the browser resolves each stack. */
@@ -27,6 +28,8 @@ export const READER_FONTS = Object.freeze(['serif', 'sans', 'kai', 'mono']);
 export const READER_THEMES = Object.freeze(['nerv', 'paper', 'sepia', 'night', 'custom']);
 /** Smallest and largest readable font size, in CSS pixels. */
 export const READER_SIZE_RANGE = Object.freeze([12, 32]);
+/** Smallest and largest page margin, in CSS pixels. */
+export const READER_MARGIN_RANGE = Object.freeze([8, 120]);
 
 const FILE = 'dsh-reader-settings.json';
 
@@ -41,12 +44,16 @@ export function normalizeSettings(value) {
     typeof candidate === 'string' && /^#[0-9a-f]{6}$/i.test(candidate) ? candidate.toLowerCase() : fallback
   );
   const [min, max] = READER_SIZE_RANGE;
+  const [marginMin, marginMax] = READER_MARGIN_RANGE;
   return {
     theme: READER_THEMES.includes(source.theme) ? source.theme : READER_DEFAULTS.theme,
     font: READER_FONTS.includes(source.font) ? source.font : READER_DEFAULTS.font,
     size: Number.isFinite(source.size) ? Math.min(max, Math.max(min, Math.round(source.size))) : READER_DEFAULTS.size,
     ink: color(source.ink, READER_DEFAULTS.ink),
     paper: color(source.paper, READER_DEFAULTS.paper),
+    margin: Number.isFinite(source.margin)
+      ? Math.min(marginMax, Math.max(marginMin, Math.round(source.margin)))
+      : READER_DEFAULTS.margin,
   };
 }
 

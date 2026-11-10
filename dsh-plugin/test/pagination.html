@@ -22,7 +22,8 @@
   window.__ModuleLoader__ = { load: (entry) => { window.__pluginEntry = entry; } };
   // The plugin's API transport is stubbed below; keep a real one for reporting.
   /** Reader presentation settings served to the plugin by the stubbed host. */
-  const READER = { theme: 'nerv', font: 'serif', size: 21, ink: '#d8d8d0', paper: '#080807' };
+  const MARGIN = Number(new URLSearchParams(location.search).get('m')) || 36;
+  const READER = { theme: 'nerv', font: 'serif', size: 21, ink: '#d8d8d0', paper: '#080807', margin: MARGIN };
   const reportFetch = window.fetch.bind(window);
   const harnessLog = (step, detail) => {
     try { reportFetch('/log', { method: 'POST', body: JSON.stringify({ step, ...detail }) }).catch(() => {}); } catch { /* ignore */ }
@@ -178,6 +179,11 @@
         family: getComputedStyle(article).fontFamily,
         paper: getComputedStyle(surface).backgroundColor,
       };
+      const expectedWidth = Math.round(Math.max(360, Math.min(1200 - MARGIN * 2, 860 - (MARGIN - 36) * 1.6)));
+      report.expectedColumnWidth = expectedWidth;
+      if (Math.abs(columnWidth - expectedWidth) > 2) {
+        return fail(`column is ${columnWidth}px for margin ${MARGIN}px, expected ${expectedWidth}px`);
+      }
       if (report.typography.font !== `${READER.size}px`) {
         return fail(`reading size is ${report.typography.font} instead of ${READER.size}px`);
       }
@@ -327,6 +333,31 @@
       const chapterAfter = container.querySelector('.nr-reader-chapter').textContent;
       report.chapterTurn = { before: chapterBefore, after: chapterAfter, hint: hintText() };
       harnessLog('chapter-turn', report.chapterTurn);
+
+      // The settings popover belongs in the top-right of the reading surface.
+      const settingsButton = [...container.querySelectorAll('.nr-reader-head button')]
+        .find((button) => (button.textContent ?? '').trim() === 'Aa');
+      if (settingsButton === undefined) return fail('no Aa button in the reader header');
+      settingsButton.click();
+      await frame();
+      await frame();
+      const pop = container.querySelector('.nr-pop');
+      if (pop === null) return fail('the settings popover did not open');
+      const popRect = pop.getBoundingClientRect();
+      const readerRect = container.getBoundingClientRect();
+      report.popover = {
+        position: getComputedStyle(pop).position,
+        right: Math.round(readerRect.right - popRect.right),
+        top: Math.round(popRect.top - readerRect.top),
+        width: Math.round(popRect.width),
+      };
+      if (report.popover.position !== 'absolute') return fail(`popover is ${report.popover.position}`);
+      const textEdge = Math.round((1200 - columnWidth) / 2);
+      report.textEdge = textEdge;
+      if (Math.abs(report.popover.right - textEdge) > 2) {
+        return fail(`popover is ${report.popover.right}px from the right, text edge is ${textEdge}px`);
+      }
+      if (report.popover.top > 140) return fail(`popover top is ${report.popover.top}px`);
       if (chapterBefore === chapterAfter) return fail('a flip at the last page did not change chapter');
       if (pageIndex() !== 0) return fail(`the next chapter opened on page ${pageIndex() + 1} instead of 1`);
 
