@@ -21,6 +21,8 @@
   window.addEventListener('error', (event) => window.__loaderErrors.push(String(event.message)));
   window.__ModuleLoader__ = { load: (entry) => { window.__pluginEntry = entry; } };
   // The plugin's API transport is stubbed below; keep a real one for reporting.
+  /** Reader presentation settings served to the plugin by the stubbed host. */
+  const READER = { theme: 'nerv', font: 'serif', size: 21, ink: '#d8d8d0', paper: '#080807' };
   const reportFetch = window.fetch.bind(window);
   const harnessLog = (step, detail) => {
     try { reportFetch('/log', { method: 'POST', body: JSON.stringify({ step, ...detail }) }).catch(() => {}); } catch { /* ignore */ }
@@ -39,6 +41,9 @@
   window.fetch = async (url, init) => {
     const path = String(url).replace('/novel-reader/api', '');
     const body = (payload) => ({ ok: true, status: 200, statusText: 'OK', json: async () => payload });
+    // A non-default reading typography, so the pagination is measured with the
+    // settings applied rather than the defaults.
+    if (path === '/reader-settings') return body(READER);
     if (path === '/books/harness/chapters') return body({ chapters: CHAPTERS, progress: BOOK.progress, book: BOOK });
     const chapter = /^\/books\/harness\/chapter\/(\d+)$/.exec(path);
     if (chapter !== null) {
@@ -116,6 +121,8 @@
         book: BOOK,
         initialChapter: 0,
         initialOffset: 0.4,
+        settings: READER,
+        onSettings: () => {},
         onExit: () => {},
       }));
       await frame();
@@ -156,6 +163,26 @@
 
       // 1) The reading area never scrolls: no vertical overflow means no line is
       //    parked below the visible box.
+      harnessLog('layout', {
+        viewport: [viewport.clientWidth, viewport.clientHeight],
+        clip: [clip.clientWidth, clip.clientHeight],
+        flow: [flow.clientWidth, flow.clientHeight, flow.scrollWidth],
+        inline: { w: flow.style.width, h: flow.style.height, cw: flow.style.columnWidth, fill: getComputedStyle(flow).columnFill },
+        articleFont: getComputedStyle(article).fontSize,
+        rootVars: container.querySelector('.nr-reader')?.getAttribute('style') ?? '',
+      });
+      // The reading settings must have been applied to the surface.
+      const surface = container.querySelector('.nr-reader');
+      report.typography = {
+        font: getComputedStyle(article).fontSize,
+        family: getComputedStyle(article).fontFamily,
+        paper: getComputedStyle(surface).backgroundColor,
+      };
+      if (report.typography.font !== `${READER.size}px`) {
+        return fail(`reading size is ${report.typography.font} instead of ${READER.size}px`);
+      }
+      if (!/serif/i.test(report.typography.family)) return fail(`reading font is ${report.typography.family}`);
+
       // The illustration must have loaded and taken space inside a page.
       const figure = article.querySelector('figure img');
       report.illustration = figure === null ? null : Math.round(figure.getBoundingClientRect().height);

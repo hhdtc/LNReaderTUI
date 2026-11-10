@@ -97,6 +97,21 @@ window.__ModuleLoader__.load({
       hideLogs: '收起日志',
       unknownAuthor: '未知作者',
       readerEnd: '本章完',
+      readerSettings: '阅读设置',
+      fullscreen: '全屏',
+      theme: '主题',
+      font: '字体',
+      fontSize: '字号',
+      textColor: '字色',
+      backgroundColor: '背景',
+      themeNerv: 'NERV',
+      themePaper: '纸白',
+      themeSepia: '米黄',
+      themeNight: '夜蓝',
+      fontSerif: '衬线',
+      fontSans: '无衬线',
+      fontKai: '楷体',
+      fontMono: '等宽',
     };
     const en = {
       panel: 'Novels',
@@ -176,6 +191,21 @@ window.__ModuleLoader__.load({
       hideLogs: 'Hide logs',
       unknownAuthor: 'Unknown author',
       readerEnd: 'End of chapter',
+      readerSettings: 'Reading settings',
+      fullscreen: 'Fullscreen',
+      theme: 'Theme',
+      font: 'Font',
+      fontSize: 'Size',
+      textColor: 'Text',
+      backgroundColor: 'Background',
+      themeNerv: 'NERV',
+      themePaper: 'Paper',
+      themeSepia: 'Sepia',
+      themeNight: 'Night',
+      fontSerif: 'Serif',
+      fontSans: 'Sans',
+      fontKai: 'Kai',
+      fontMono: 'Mono',
     };
 
     const language = (typeof navigator !== 'undefined' && String(navigator.language || '').toLowerCase().startsWith('zh'))
@@ -243,6 +273,9 @@ window.__ModuleLoader__.load({
       update: (query) => request('/update', { method: 'POST', body: JSON.stringify({ query }) }),
       /** URL of one illustration read out of a book archive. */
       imageUrl: (id, entry) => `${API_BASE}/books/${encodeURIComponent(id)}/image?path=${encodeURIComponent(entry)}`,
+      /** Reader presentation settings (theme, font, size, ink, paper). */
+      readerSettings: () => request('/reader-settings'),
+      saveReaderSettings: (patch) => request('/reader-settings', { method: 'POST', body: JSON.stringify(patch) }),
       /** URL of a book's own cover image. */
       coverUrl: (id) => `${API_BASE}/books/${encodeURIComponent(id)}/cover`,
       job: (id) => request(`/jobs/${encodeURIComponent(id)}`),
@@ -252,7 +285,93 @@ window.__ModuleLoader__.load({
     // ── styles ──────────────────────────────────────────────────────────────
 
     const CSS = `
+      /* ── NERV skin: phosphor palette, mono labels, square hardware ───────── */
+      .nr-page[data-skin="nerv"]{
+        --nr-accent:#ff9830;--nr-orange:#ff9830;--nr-orange-dim:#c87020;--nr-orange-hot:#ffcc50;
+        --nr-cyan:#20f0ff;--nr-green:#50ff50;--nr-red:#ff3030;
+        --nr-steel:#d8d8d0;--nr-steel-dim:#888880;
+        --nr-void:#000;--nr-void-warm:#080807;--nr-panel:#0c0c0a;--nr-raised:#111110;
+        --nr-line:rgba(216,216,208,.16);--nr-line-soft:rgba(216,216,208,.09);
+        --nr-mono:'JetBrains Mono','Cascadia Mono',Consolas,ui-monospace,monospace;
+        --dsw-alias-bg-base:#080807;--dsw-alias-bg-layer-1:#0c0c0a;--dsw-alias-bg-layer-3:rgba(216,216,208,.10);
+        --dsw-alias-border-l3:rgba(216,216,208,.16);
+        --dsw-alias-label-primary:#d8d8d0;--dsw-alias-label-secondary:#a8a8a0;--dsw-alias-label-tertiary:#888880;
+        --dsw-alias-state-business-primary:#ff9830;--dsw-alias-interactive-bg-hover:rgba(255,152,48,.10);
+        --dsw-focus-ring-color:#ff9830;
+        background:var(--nr-void);color:var(--nr-steel);font-family:var(--nr-mono);font-size:12.5px}
+      .nr-page[data-skin="nerv"] .nr-head{border-bottom:1px solid var(--nr-orange-dim);background:var(--nr-void-warm);overflow:hidden}
+      .nr-page[data-skin="nerv"] .nr-head::before{content:'';position:absolute;inset:0 0 auto;height:6px;
+        background:repeating-linear-gradient(-45deg,var(--nr-orange) 0 14px,transparent 14px 28px);opacity:.45}
+      .nr-page[data-skin="nerv"] .nr-title{font-family:var(--nr-mono);font-size:15px;font-weight:700;
+        letter-spacing:.18em;text-transform:uppercase;color:var(--nr-orange)}
+      .nr-page[data-skin="nerv"] .nr-subtle{font-size:11px;letter-spacing:.04em;color:var(--nr-steel-dim)}
+      .nr-page[data-skin="nerv"] .nr-tab{font-family:var(--nr-mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;
+        border-radius:0;border:1px solid transparent;color:var(--nr-steel-dim)}
+      .nr-page[data-skin="nerv"] .nr-tab:hover{background:rgba(255,152,48,.08);color:var(--nr-orange);border-color:var(--nr-line)}
+      .nr-page[data-skin="nerv"] .nr-tab[data-active="true"]{background:rgba(255,152,48,.12);color:var(--nr-orange-hot);
+        border-color:var(--nr-orange-dim);font-weight:700}
+      .nr-page[data-skin="nerv"] .nr-btn{border-radius:0;border:1px solid var(--nr-line);background:var(--nr-panel);
+        color:var(--nr-steel);font-family:var(--nr-mono);font-size:11.5px;letter-spacing:.06em}
+      .nr-page[data-skin="nerv"] .nr-btn:hover{background:rgba(255,152,48,.10);border-color:var(--nr-orange-dim);color:var(--nr-orange-hot)}
+      .nr-page[data-skin="nerv"] .nr-btn--primary{background:var(--nr-orange);border-color:var(--nr-orange);color:#0b0906;font-weight:700}
+      .nr-page[data-skin="nerv"] .nr-btn--ghost{border-color:transparent;background:transparent;color:var(--nr-orange)}
+      .nr-page[data-skin="nerv"] .nr-input{border-radius:0;border:1px solid var(--nr-line);background:var(--nr-void-warm);font-family:var(--nr-mono)}
+      .nr-page[data-skin="nerv"] .nr-input:focus{border-color:var(--nr-orange)}
+      .nr-page[data-skin="nerv"] .nr-card{border-radius:0;border:1px solid var(--nr-line-soft);
+        background:linear-gradient(180deg,var(--nr-panel),var(--nr-void-warm))}
+      .nr-page[data-skin="nerv"] .nr-card:hover{border-color:var(--nr-orange-dim);background:rgba(255,152,48,.06)}
+      .nr-page[data-skin="nerv"] .nr-cover{border-radius:0;border:1px solid var(--nr-line);background:#101010}
+      .nr-page[data-skin="nerv"] .nr-chip{border-radius:0;border:1px solid var(--nr-line);background:rgba(216,216,208,.06);
+        font-family:var(--nr-mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase}
+      .nr-page[data-skin="nerv"] .nr-chip--ok{color:var(--nr-green);border-color:rgba(80,255,80,.35);background:rgba(80,255,80,.08)}
+      .nr-page[data-skin="nerv"] .nr-chip--warn{color:var(--nr-orange-hot);border-color:rgba(255,204,80,.35);background:rgba(255,204,80,.08)}
+      .nr-page[data-skin="nerv"] .nr-chip--bad{color:var(--nr-red);border-color:rgba(255,48,48,.35);background:rgba(255,48,48,.10)}
+      .nr-page[data-skin="nerv"] .nr-panel{border-radius:0;border:1px solid var(--nr-line-soft);background:var(--nr-panel)}
+      .nr-page[data-skin="nerv"] .nr-body{position:relative;background-image:
+        linear-gradient(var(--nr-line-soft) 1px,transparent 1px),
+        linear-gradient(90deg,var(--nr-line-soft) 1px,transparent 1px);
+        background-size:44px 44px,44px 44px}
+      .nr-page[data-skin="nerv"] .nr-body::after{content:'';position:absolute;inset:0;pointer-events:none;
+        background:repeating-linear-gradient(0deg,transparent 0 2px,rgba(0,0,0,.04) 2px 4px)}
+      .nr-page[data-skin="nerv"] .nr-page-hint{border-radius:0;font-family:var(--nr-mono);letter-spacing:.14em;
+        background:var(--nr-void);color:var(--nr-orange);border:1px solid var(--nr-line)}
+      /* ── reading surface chrome follows the paper/ink pair ────────────────── */
+      .nr-reader .nr-btn{border-radius:0;border:1px solid color-mix(in srgb,var(--nr-ink) 26%,transparent);
+        background:transparent;color:var(--nr-ink);font-family:var(--nr-mono);font-size:11.5px}
+      .nr-reader .nr-btn:hover{background:color-mix(in srgb,var(--nr-ink) 10%,transparent)}
+      .nr-reader .nr-btn--primary{background:var(--nr-accent,#ff9830);border-color:var(--nr-accent,#ff9830);color:#0b0906;font-weight:700}
+      .nr-reader .nr-btn--ghost{border-color:transparent;background:transparent;color:var(--nr-accent,#ff9830)}
+      .nr-reader-head{border-bottom:1px solid color-mix(in srgb,var(--nr-ink) 18%,transparent)}
+      .nr-reader-book{font-family:var(--nr-mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+        color:color-mix(in srgb,var(--nr-ink) 58%,transparent)}
+      .nr-reader-chapter{font-size:13px;color:var(--nr-ink);opacity:.85}
+      .nr-reader:fullscreen{background:var(--nr-paper,#080807)}
+      /* ── reading settings popover ─────────────────────────────────────────── */
+      .nr-pop{position:absolute;z-index:6;top:calc(56px + var(--dsh-frame-top-clearance,0px));right:var(--nr-inset);
+        display:flex;flex-direction:column;gap:10px;padding:14px 14px 12px;min-width:300px;
+        background:var(--nr-panel,#0c0c0a);border:1px solid var(--nr-orange-dim,#c87020);
+        box-shadow:0 16px 44px rgba(0,0,0,.65);font-family:var(--nr-mono,'monospace');font-size:11.5px;color:var(--nr-steel,#d8d8d0)}
+      .nr-pop::before{content:'';position:absolute;inset:0 0 auto;height:4px;
+        background:repeating-linear-gradient(-45deg,var(--nr-orange,#ff9830) 0 10px,transparent 10px 20px);opacity:.6}
+      .nr-pop-row{display:flex;align-items:center;gap:6px}
+      .nr-pop-label{flex:none;width:40px;color:var(--nr-steel-dim,#888);text-transform:uppercase;
+        letter-spacing:.1em;font-size:10px}
+      .nr-pop-value{min-width:42px;text-align:right;color:var(--nr-orange,#ff9830);font-variant-numeric:tabular-nums}
+      .nr-swatch{width:28px;height:22px;border:1px solid var(--nr-line,rgba(216,216,208,.2));background:var(--sw-paper);
+        color:var(--sw-ink);font-size:11px;line-height:1;cursor:pointer;display:grid;place-items:center;font-family:serif}
+      .nr-swatch--on{outline:1px solid var(--nr-orange,#ff9830);outline-offset:1px}
+      .nr-chip-btn{border:1px solid var(--nr-line,rgba(216,216,208,.2));background:transparent;color:inherit;
+        font-size:11px;padding:3px 8px;cursor:pointer;border-radius:0}
+      .nr-chip-btn--on{background:rgba(255,152,48,.14);border-color:var(--nr-orange-dim,#c87020);color:var(--nr-orange-hot,#ffcc50)}
+      .nr-dot{width:18px;height:18px;border-radius:50%;border:1px solid var(--nr-line,rgba(216,216,208,.2));
+        background:var(--sw);cursor:pointer;padding:0}
+      .nr-dot--on{outline:1px solid var(--nr-orange,#ff9830);outline-offset:2px}
+      .nr-color{width:26px;height:22px;padding:0;border:1px solid var(--nr-line,rgba(216,216,208,.2));
+        background:transparent;cursor:pointer}
+      .nr-range{flex:1;min-width:90px;accent-color:var(--nr-orange,#ff9830)}
+      .nr-btn--tiny{padding:1px 7px;font-size:13px;line-height:1.2}
       .nr-page{box-sizing:border-box;height:100%;display:flex;flex-direction:column;color:var(--dsw-alias-label-primary);
+        min-height:0}
         font-size:14px;line-height:1.5;--nr-inset:clamp(16px,3vw,32px)}
       .nr-head{flex:none;display:flex;flex-direction:column;gap:10px;padding:calc(20px + var(--dsh-frame-top-clearance,0px)) var(--nr-inset) 10px;
         border-bottom:.5px solid var(--dsw-alias-border-l3);background:var(--dsw-alias-bg-base);position:relative;z-index:2}
@@ -314,7 +433,9 @@ window.__ModuleLoader__.load({
       .nr-volume{border:.5px solid var(--dsw-alias-border-l3);border-radius:var(--dsw-radius-sm,#6px);padding:6px 10px;background:var(--dsw-alias-bg-layer-1,transparent)}
       .nr-volume summary{cursor:pointer;font-size:13px;display:flex;gap:8px;align-items:center}
       .nr-volume ol{margin:6px 0 0;padding-inline-start:20px;font-size:12.5px;color:var(--dsw-alias-label-secondary);max-height:220px;overflow:auto}
-      .nr-reader{display:flex;flex-direction:column;height:100%;min-height:0;background:var(--dsw-alias-bg-base)}
+      .nr-page--reader{display:flex;flex-direction:column;flex:1;min-height:0}
+      .nr-reader{display:flex;flex-direction:column;height:100%;flex:1;min-height:0;position:relative;
+        background:var(--nr-paper,#080807);color:var(--nr-ink,#d8d8d0)}
       .nr-reader-head{flex:none;display:flex;gap:8px;align-items:center;padding:calc(16px + var(--dsh-frame-top-clearance,0px)) var(--nr-inset) 10px;
         border-bottom:.5px solid var(--dsw-alias-border-l3);flex-wrap:wrap}
       .nr-reader-title{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1}
@@ -327,7 +448,8 @@ window.__ModuleLoader__.load({
       /* One page wide and clipped: the neighbouring columns never bleed in. */
       .nr-page-clip{position:absolute;overflow:hidden}
       .nr-reader-flow{position:absolute;column-fill:auto;will-change:transform}
-      .nr-article{font-size:16px;line-height:1.95;letter-spacing:.01em}
+      .nr-article{font-family:var(--nr-font-family,serif);font-size:var(--nr-font-size,16px);
+        line-height:1.95;letter-spacing:.01em;color:var(--nr-ink,#d8d8d0)}
       .nr-article p{margin:0 0 1em;text-indent:2em;orphans:2;widows:2}
       .nr-article p:first-child{margin-top:0}
       .nr-article .nr-reader-end{text-align:center;text-indent:0;color:var(--dsw-alias-label-tertiary);margin-top:1.2em}
@@ -737,6 +859,21 @@ window.__ModuleLoader__.load({
 
     /** Gap between page columns; also the distance a flip travels minus one page. */
     const READER_GAP = 88;
+    /** Font stacks the settings offer (system fonts only: no webfont requests). */
+    const READER_FONTS = {
+      serif: '"Noto Serif SC","Source Han Serif SC","Songti SC",SimSun,serif',
+      sans: '"Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif',
+      kai: '"Kaiti SC",KaiTi,STKaiti,"Noto Serif SC",serif',
+      mono: 'ui-monospace,"JetBrains Mono","Cascadia Mono",Consolas,monospace',
+    };
+    /** Reading themes: paper/ink pairs. `custom` keeps whatever the user picked. */
+    const READER_PAPERS = {
+      nerv: { ink: '#d8d8d0', paper: '#080807' },
+      paper: { ink: '#1f1b16', paper: '#f7f3e9' },
+      sepia: { ink: '#4a3b2a', paper: '#f1e3c8' },
+      night: { ink: '#c9cfd8', paper: '#12131a' },
+    };
+    const READER_DEFAULT = { theme: 'nerv', font: 'serif', size: 17, ink: '#d8d8d0', paper: '#080807' };
     /** Widest line measure a page may use, so a wide panel does not stretch lines. */
     const READER_MAX_MEASURE = 860;
     const READER_PAD_X = 36;
@@ -763,7 +900,11 @@ window.__ModuleLoader__.load({
      * a page always ends on a whole text line (the browser breaks columns
      * between line boxes, never through one).
      */
-    function Reader({ book, onExit, initialChapter, initialOffset }) {
+    function Reader({ book, onExit, initialChapter, initialOffset, settings, onSettings }) {
+      const view = { ...READER_DEFAULT, ...(settings ?? {}) };
+      const [settingsOpen, setSettingsOpen] = React.useState(false);
+      const [isFullscreen, setIsFullscreen] = React.useState(false);
+      const readerRef = React.useRef(null);
       const [chapters, setChapters] = React.useState(null);
       const [index, setIndex] = React.useState(Math.max(0, Number(book?.progress?.chapterIndex) || 0));
       const [chapter, setChapter] = React.useState(null);
@@ -787,6 +928,26 @@ window.__ModuleLoader__.load({
       const wheelAt = React.useRef(0);
       const relayoutTimer = React.useRef(null);
 
+      React.useEffect(() => {
+        const sync = () => setIsFullscreen(document.fullscreenElement === readerRef.current);
+        document.addEventListener('fullscreenchange', sync);
+        return () => document.removeEventListener('fullscreenchange', sync);
+      }, []);
+
+      /** Fullscreen the reading surface itself, so the panel chrome stays out. */
+      const toggleFullscreen = React.useCallback(() => {
+        const element = readerRef.current;
+        if (element === null) return;
+        if (document.fullscreenElement === element) {
+          document.exitFullscreen?.().catch(() => {});
+          return;
+        }
+        const request = element.requestFullscreen ?? element.webkitRequestFullscreen;
+        if (typeof request === 'function') {
+          Promise.resolve(request.call(element)).catch(() => {});
+        }
+      }, []);
+
       indexRef.current = index;
       chapterRef.current = chapter;
       pageRef.current = currentPage;
@@ -797,6 +958,9 @@ window.__ModuleLoader__.load({
        * requested page. `mode` is 'first', 'last', or undefined to keep the
        * fraction we were on (a resize or the chapter panel opening).
        */
+      // `view.size`/`view.font` drive the CSS variables the flow inherits, so
+      // the callback is recreated when they change; the layout effect that
+      // depends on it then re-paginates.
       const relayout = React.useCallback((mode) => {
         const viewport = viewportRef.current;
         const clip = clipRef.current;
@@ -836,7 +1000,7 @@ window.__ModuleLoader__.load({
         }
         setLayout({ width, height, pages });
         setCurrentPage(target);
-      }, []);
+      }, [view.size, view.font]);
 
       /** Persist the current chapter and page fraction; a repeated save is skipped. */
       const save = React.useCallback((immediate) => {
@@ -1010,6 +1174,20 @@ window.__ModuleLoader__.load({
               event.preventDefault();
               setPanelOpen((open) => !open);
               break;
+            case 'f':
+              event.preventDefault();
+              toggleFullscreen();
+              break;
+            case '-':
+            case '_':
+              event.preventDefault();
+              onSettings?.({ size: Math.max(12, view.size - 1) });
+              break;
+            case '=':
+            case '+':
+              event.preventDefault();
+              onSettings?.({ size: Math.min(32, view.size + 1) });
+              break;
             case 'q':
             case 'Escape':
               event.preventDefault();
@@ -1022,7 +1200,7 @@ window.__ModuleLoader__.load({
         };
         window.addEventListener('keydown', handler);
         return () => window.removeEventListener('keydown', handler);
-      }, [flip, turnChapter, onExit, save]);
+      }, [flip, turnChapter, onExit, save, toggleFullscreen, onSettings, view.size]);
 
       // The wheel flips pages instead of scrolling the text.
       React.useEffect(() => {
@@ -1054,7 +1232,17 @@ window.__ModuleLoader__.load({
         else if (x > (rect.width * 2) / 3) flip(1);
       };
 
-      return h('div', { className: 'nr-reader' }, [
+      return h('div', {
+        className: 'nr-reader',
+        ref: readerRef,
+        'data-paper': view.theme,
+        style: {
+          '--nr-font-family': READER_FONTS[view.font] ?? READER_FONTS.serif,
+          '--nr-font-size': `${view.size}px`,
+          '--nr-ink': view.ink,
+          '--nr-paper': view.paper,
+        },
+      }, [
         h('header', { key: 'head', className: 'nr-reader-head' }, [
           h('button', {
             key: 'back',
@@ -1070,6 +1258,21 @@ window.__ModuleLoader__.load({
             h('div', { key: 'chapter', className: 'nr-reader-chapter' }, `${t('chapters')} ${index + 1}/${total || '?'} · ${chapterTitle}`),
           ]),
           h('div', { key: 'actions', className: 'nr-row' }, [
+            h('button', {
+              key: 'settings',
+              type: 'button',
+              className: settingsOpen ? 'nr-btn nr-btn--primary' : 'nr-btn',
+              onClick: () => setSettingsOpen((open) => !open),
+              title: t('readerSettings'),
+              'aria-expanded': settingsOpen ? 'true' : 'false',
+            }, 'Aa'),
+            h('button', {
+              key: 'fullscreen',
+              type: 'button',
+              className: isFullscreen ? 'nr-btn nr-btn--primary' : 'nr-btn',
+              onClick: toggleFullscreen,
+              title: t('fullscreen'),
+            }, isFullscreen ? '⤡' : '⛶'),
             h('button', { key: 'prev', type: 'button', className: 'nr-btn', onClick: () => turnChapter(-1), title: t('prevChapter') }, '«'),
             h('button', { key: 'prevpage', type: 'button', className: 'nr-btn', onClick: () => flip(-1), title: t('prevPage') }, '‹'),
             h('button', { key: 'nextpage', type: 'button', className: 'nr-btn', onClick: () => flip(1), title: t('nextPage') }, '›'),
@@ -1082,6 +1285,99 @@ window.__ModuleLoader__.load({
             }, t('chapterPanel')),
           ]),
         ]),
+        settingsOpen
+          ? h('div', { key: 'settings', className: 'nr-pop', role: 'dialog', 'aria-label': t('readerSettings') }, [
+            h('div', { key: 'themes', className: 'nr-pop-row' }, [
+              h('span', { key: 'label', className: 'nr-pop-label' }, t('theme')),
+              ...['nerv', 'paper', 'sepia', 'night'].map((name) => h('button', {
+                key: name,
+                type: 'button',
+                className: view.theme === name ? 'nr-swatch nr-swatch--on' : 'nr-swatch',
+                onClick: () => onSettings?.({ theme: name, ...READER_PAPERS[name] }),
+                title: t(`theme${name[0].toUpperCase()}${name.slice(1)}`),
+                'data-theme': name,
+                style: { '--sw-paper': READER_PAPERS[name].paper, '--sw-ink': READER_PAPERS[name].ink },
+              }, 'Aa')),
+            ]),
+            h('div', { key: 'fonts', className: 'nr-pop-row' }, [
+              h('span', { key: 'label', className: 'nr-pop-label' }, t('font')),
+              ...['serif', 'sans', 'kai', 'mono'].map((name) => h('button', {
+                key: name,
+                type: 'button',
+                className: view.font === name ? 'nr-chip-btn nr-chip-btn--on' : 'nr-chip-btn',
+                onClick: () => onSettings?.({ font: name }),
+                style: { fontFamily: READER_FONTS[name] },
+              }, t(`font${name[0].toUpperCase()}${name.slice(1)}`))),
+            ]),
+            h('div', { key: 'size', className: 'nr-pop-row' }, [
+              h('span', { key: 'label', className: 'nr-pop-label' }, t('fontSize')),
+              h('button', {
+                key: 'minus',
+                type: 'button',
+                className: 'nr-btn nr-btn--tiny',
+                onClick: () => onSettings?.({ size: Math.max(12, view.size - 1) }),
+                title: '−',
+              }, '−'),
+              h('input', {
+                key: 'range',
+                type: 'range',
+                className: 'nr-range',
+                min: 12,
+                max: 32,
+                step: 1,
+                value: view.size,
+                onChange: (event) => onSettings?.({ size: Number(event.target.value) }),
+                'aria-label': t('fontSize'),
+              }),
+              h('button', {
+                key: 'plus',
+                type: 'button',
+                className: 'nr-btn nr-btn--tiny',
+                onClick: () => onSettings?.({ size: Math.min(32, view.size + 1) }),
+                title: '+',
+              }, '+'),
+              h('span', { key: 'value', className: 'nr-pop-value' }, `${view.size}px`),
+            ]),
+            h('div', { key: 'ink', className: 'nr-pop-row' }, [
+              h('span', { key: 'label', className: 'nr-pop-label' }, t('textColor')),
+              ...['#d8d8d0', '#1f1b16', '#c87020', '#20f0ff', '#50ff50'].map((color) => h('button', {
+                key: color,
+                type: 'button',
+                className: view.ink === color ? 'nr-dot nr-dot--on' : 'nr-dot',
+                style: { '--sw': color },
+                onClick: () => onSettings?.({ ink: color, theme: 'custom' }),
+                title: color,
+              })),
+              h('input', {
+                key: 'picker',
+                type: 'color',
+                className: 'nr-color',
+                value: view.ink,
+                onChange: (event) => onSettings?.({ ink: event.target.value, theme: 'custom' }),
+                'aria-label': t('textColor'),
+              }),
+            ]),
+            h('div', { key: 'paper', className: 'nr-pop-row' }, [
+              h('span', { key: 'label', className: 'nr-pop-label' }, t('backgroundColor')),
+              ...['#080807', '#f7f3e9', '#f1e3c8', '#12131a', '#ffffff'].map((color) => h('button', {
+                key: color,
+                type: 'button',
+                className: view.paper === color ? 'nr-dot nr-dot--on' : 'nr-dot',
+                style: { '--sw': color },
+                onClick: () => onSettings?.({ paper: color, theme: 'custom' }),
+                title: color,
+              })),
+              h('input', {
+                key: 'picker',
+                type: 'color',
+                className: 'nr-color',
+                value: view.paper,
+                onChange: (event) => onSettings?.({ paper: event.target.value, theme: 'custom' }),
+                'aria-label': t('backgroundColor'),
+              }),
+            ]),
+          ])
+          : null,
         h('div', { key: 'stage', className: 'nr-reader-stage' }, [
           h('div', {
             key: 'viewport',
@@ -1172,6 +1468,8 @@ window.__ModuleLoader__.load({
       const [importing, setImporting] = React.useState(false);
       const [toast, setToast] = React.useState(null);
       const [reader, setReader] = React.useState(null);
+      const [readerSettings, setReaderSettings] = React.useState(READER_DEFAULT);
+      const settingsSaveTimer = React.useRef(null);
       const searchToken = React.useRef(0);
 
       const notify = React.useCallback((message) => {
@@ -1195,7 +1493,24 @@ window.__ModuleLoader__.load({
       React.useEffect(() => {
         refreshBooks();
         api.status().then(setStatus).catch(() => setStatus(null));
+        api.readerSettings()
+          .then((stored) => setReaderSettings((current) => ({ ...current, ...stored })))
+          .catch(() => { /* defaults are usable */ });
       }, [refreshBooks]);
+
+      React.useEffect(() => () => {
+        if (settingsSaveTimer.current !== null) clearTimeout(settingsSaveTimer.current);
+      }, []);
+
+      /** Apply a settings patch locally, then persist it once the user stops. */
+      const patchReaderSettings = React.useCallback((patch) => {
+        setReaderSettings((current) => ({ ...current, ...patch }));
+        if (settingsSaveTimer.current !== null) clearTimeout(settingsSaveTimer.current);
+        settingsSaveTimer.current = setTimeout(() => {
+          settingsSaveTimer.current = null;
+          api.saveReaderSettings(patch).catch(() => { /* the panel keeps working offline */ });
+        }, 400);
+      }, []);
 
       // Debounced search: 500 ms after the last keystroke, like the TUI.
       React.useEffect(() => {
@@ -1337,7 +1652,9 @@ window.__ModuleLoader__.load({
       }, [job, notify]);
 
       if (reader !== null) {
-        return h(Reader, {
+        return h('div', { className: 'nr-page nr-page--reader', 'data-skin': 'nerv' }, h(Reader, {
+          settings: readerSettings,
+          onSettings: patchReaderSettings,
           book: reader.book,
           initialChapter: reader.chapter,
           initialOffset: reader.offset,
@@ -1346,7 +1663,7 @@ window.__ModuleLoader__.load({
             refreshBooks();
           },
           onNotify: notify,
-        });
+        }));
       }
 
       const downloadedSources = new Set(books.map((book) => book.sourceId).filter((id) => typeof id === 'string' && id !== ''));
@@ -1356,7 +1673,7 @@ window.__ModuleLoader__.load({
         ? detail.book.novelId
         : (detail?.book?.url ?? query.trim());
 
-      return h('div', { className: 'nr-page' }, [
+      return h('div', { className: 'nr-page', 'data-skin': 'nerv' }, [
         h('header', { key: 'head', className: 'nr-head' }, [
           h('div', { key: 'title', className: 'nr-title-row' }, [
             h('h1', { key: 'h1', className: 'nr-title' }, t('title')),

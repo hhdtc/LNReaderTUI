@@ -12,6 +12,8 @@ DSH Web 里的小说面板：**左侧栏图标打开的书库 + 在线阅读器*
 | 搜索 | 输入即搜（500ms 去抖，过期请求丢弃）；结果显示作者/状态/评分/简介摘要与 `#小说ID`；直接「下载」或进入详情 |
 | 详情 | 作者、状态、评分、标签、简介、卷/章结构（按卷折叠，显示每卷章节数与章节标题）；已下载的书显示「已在书库」并可直接阅读或更新 |
 | 下载 / 更新 | 后台任务：实时进度（`12/85 · 第二卷 · Case-03`）、可取消、可查看 CLI 日志；完成后自动刷新书库 |
+| 界面风格 | **NERV UI**（磷光终端风）：黑底、橙 `#FF9830` 主色，数据绿 `#50FF50` / 线缆青 `#20F0FF` / 警报红 `#FF3030`，等宽字体 + 大写加字距的标签、1px 细边框、警示斜纹、扫描线与网格底。整套配色只作用于 `.nr-page[data-skin="nerv"]`（覆盖 DSH 的 `--dsw-alias-*` 变量），不污染应用其它区域 |
+| 阅读设置 | 顶栏 `Aa` 弹出：主题（NERV / 纸白 / 米黄 / 夜蓝）、字体（衬线 / 无衬线 / 楷体 / 等宽）、字号 12–32px、字色与背景色（预设色块 + 系统取色器）；`⛶` 或 `f` 全屏。设置存 `dsh-reader-settings.json`，与 `library.json` 分开，多个浏览器共享 |
 | 插图 | 章节正文里的 `<img>` 按原始顺序作为**图块**渲染（`<figure>`），高度上限为一页，超出自动等比缩放；书库/详情用 EPUB 自带的封面；图片按需从书籍文件里读取并缓存（48 MiB LRU），不复制到 dataDir |
 | 阅读器 | **纯翻页**：正文按栏排版，一页 = 一屏，不滚动、不会切出半行；左右 1/3 区域点击翻页、滚轮翻页、`←/→`（或 `h/l`、`j/k`、`PageUp/PageDown`）翻页、章末自动进下一章、`n/p` 切章、`s` 章节面板、`Esc` 返回；进度在翻页、切章、每 10s、离开页面时写回 |
 
@@ -68,9 +70,13 @@ dsh plugin --profile web add link:"$PWD"
 | `←` / `→`（或 `h` / `l`、`j` / `k`、`PageUp` / `PageDown`） | 上一页 / 下一页（到章末再翻就进下一章） |
 | `n` / `p` | 下一章 / 上一章 |
 | `s` | 展开或收起章节面板 |
+| `f` | 进入 / 退出全屏（只放大阅读区） |
+| `-` / `=` | 字号 −1 / +1 |
 | `Esc` / `q` | 回到书库 |
 
 阅读区鼠标：点击内容区左 1/3 = 上一页，右 1/3 = 下一页；滚轮也翻页。正文不滚动——每页刚好一屏，分栏在「行」边界断开；显示区被裁到正好一栏宽（`.nr-page-clip`），相邻页的栏不会从左右边缘漏出来，所以既不会只露出半行，也不会看到下一栏的字。
+
+阅读外观与全屏：`Aa` 面板里选主题/字体/字号/字色/背景。字号与字体变化会重新分栏（`relayout` 依赖它们），字色/背景只换 CSS 变量、不触发重排；`⛶` 按钮（或 `f`）对 `.nr-reader` 调用 Fullscreen API，全屏下仍是一页一屏、翻页/章节跳转正常，`Esc` 退出。设置通过 `/reader-settings` 持久化，与终端版的库结构互不影响。
 
 插图会参与分页：图片按 `--nr-page-height`（一页正文高度）限制最大高度，加载完成后自动重排一次（140 ms 防抖），并保持 `offset` 指定的比例不变——所以图片多的章节页数会变多，但进度不会漂移。
 
@@ -99,6 +105,8 @@ Host 半边在 DSH 的 Web 监听器上注册 `/novel-reader/api` 前缀路由�
 | 导入 | `lnreadertui -data-dir <dir> import <path> --json` |
 | 书库列表、进度、重置、删除 | 进程内直接读写同一份 `library.json` 与 `books/`（原子写入，字段与 `internal/model/library.go` 一致） |
 | 章节正文 | 进程内解析 EPUB/TXT（结果按 mtime/size 缓存最近 4 本） |
+| 插图 / 封面 | 进程内从 EPUB 解压读取（索引按 mtime/size 缓存，48 MiB 图片 LRU），不复制到 dataDir |
+| 阅读外观设置 | 进程内读写 `dsh-reader-settings.json`（原子写），与终端版的 `library.json` 完全分开 |
 
 HTTP 接口（全部同源、`no-store`、JSON）：
 
@@ -107,7 +115,10 @@ HTTP 接口（全部同源、`no-store`、JSON）：
 | GET | `/novel-reader/api/status` | 数据目录、CLI 可用性与版本、书数 |
 | GET | `/novel-reader/api/books` | 书库（含 `present`、`sizeBytes`、进度摘要） |
 | GET | `/novel-reader/api/books/:id/chapters` | 章节目录（解析后的真实章数） |
-| GET | `/novel-reader/api/books/:id/chapter/:index` | 一章正文（段落数组） |
+| GET | `/novel-reader/api/books/:id/chapter/:index` | 一章正文：`paragraphs`（与终端版一致的纯文本）+ `blocks`（阅读顺序，含图块） |
+| GET | `/novel-reader/api/books/:id/image?path=<entry>` | 从书籍文件读出插图；`..`/绝对路径 400，非图片或缺失 404 |
+| GET | `/novel-reader/api/books/:id/cover` | 书籍自带封面（EPUB `cover-image`） |
+| GET · POST | `/novel-reader/api/reader-settings` | 阅读外观设置：GET 返回当前值；POST 合并持久化（非法字体/主题/颜色丢弃，字号夹到 12–32） |
 | POST | `/novel-reader/api/books/:id/progress` | 写进度 `{chapterIndex, offset, chapterTitle}` |
 | POST | `/novel-reader/api/books/:id/reset` · `/delete` | 重置进度 / 删除书与文件 |
 | POST | `/novel-reader/api/import` | `{path}` 导入 |

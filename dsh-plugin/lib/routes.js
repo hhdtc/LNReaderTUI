@@ -12,6 +12,7 @@
 import { stat } from 'node:fs/promises';
 import { readBookCover, readBookFile, readBookImage } from './book.js';
 import { createCli } from './cli.js';
+import { readSettings, saveSettings } from './settings.js';
 import {
   bookFilePath,
   deleteBook,
@@ -98,6 +99,8 @@ export function createNovelReader(options) {
 
   const routes = [
     ['GET', /^\/status$/, () => status()],
+    ['GET', /^\/reader-settings$/, () => readSettings(dataDir)],
+    ['POST', /^\/reader-settings$/, (_match, body) => saveSettings(dataDir, body)],
     ['GET', /^\/books$/, () => books()],
     ['GET', /^\/books\/([^/]+)\/chapters$/, (match) => chapters(decodeURIComponent(match[1]))],
     ['GET', /^\/books\/([^/]+)\/chapter\/(\d+)$/, (match) => chapter(decodeURIComponent(match[1]), Number(match[2]))],

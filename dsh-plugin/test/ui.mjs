@@ -57,6 +57,9 @@ const act = React.act ?? (await import(pathToFileURL(join(devModules, 'react-dom
 
 /** Requests the fake API received, in order. */
 const calls = [];
+/** Reader presentation settings the fake host keeps between requests. */
+let settings = { theme: 'nerv', font: 'serif', size: 17, ink: '#d8d8d0', paper: '#080807' };
+const savedSettings = [];
 const savedProgress = [];
 
 const BOOK = {
@@ -118,6 +121,13 @@ function route(url, init) {
     };
   }
   if (path === '/books') return { books: [BOOK] };
+  if (path === '/reader-settings') {
+    if (method === 'POST') {
+      savedSettings.push(body);
+      settings = { ...settings, ...body };
+    }
+    return settings;
+  }
   if (path === `/books/${BOOK.id}/chapters`) return { chapters: CHAPTERS, progress: BOOK.progress, book: BOOK };
   const chapterMatch = /^\/books\/([^/]+)\/chapter\/(\d+)$/.exec(path);
   if (chapterMatch !== null) return chapterBody(Number(chapterMatch[2]));
@@ -298,6 +308,56 @@ await step('opening the book loads chapter text in a paged (non-scrolling) view'
   assert.ok((figure.getAttribute('src') ?? '').includes('/books/abc123/image?path='), 'illustration is not served by the image route');
   assert.ok(text().includes('1 / 1'), `page indicator missing: ${text().slice(-120)}`);
   assert.ok(calls.some((entry) => entry.path === '/books/abc123/chapter/1'));
+});
+
+await step('reading settings apply live and persist through the host', async () => {
+  const reader = container.querySelector('.nr-reader');
+  assert.ok(reader !== null, 'reader root missing');
+  assert.equal(reader.style.getPropertyValue('--nr-font-size'), '17px');
+  assert.equal(reader.style.getPropertyValue('--nr-font-family').includes('Serif'), true);
+  assert.equal(container.querySelector('.nr-page').getAttribute('data-skin'), 'nerv');
+
+  // The NERV skin is scoped: the panel root carries the palette, not the app.
+  const popover = () => container.querySelector('.nr-pop');
+  assert.equal(popover(), null, 'settings popover started open');
+  await click(findButton('Aa'));
+  await flush(10);
+  assert.ok(popover() !== null, 'settings popover did not open');
+  for (const label of ['主题', '字体', '字号', '字色', '背景']) {
+    assert.ok(popover().textContent.includes(label), `popover misses ${label}`);
+  }
+
+  // Font size: the slider drives the CSS variable and a re-page.
+  const range = popover().querySelector('.nr-range');
+  // React tracks the previous value, so assign through the native setter.
+  const setValue = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+  await act(async () => {
+    setValue.call(range, '22');
+    range.dispatchEvent(new window.Event('input', { bubbles: true }));
+  });
+  await flush(60);
+  assert.equal(container.querySelector('.nr-reader').style.getPropertyValue('--nr-font-size'), '22px');
+  // Persistence is debounced by 400 ms on purpose (dragging the slider).
+  await flush(520);
+  assert.ok(savedSettings.some((patch) => patch.size === 22), 'font size was not persisted');
+
+  // Theme switch repaints the reading surface.
+  const sepia = [...popover().querySelectorAll('.nr-swatch')].find((element) => element.getAttribute('data-theme') === 'sepia');
+  await click(sepia);
+  await flush(60);
+  const surface = container.querySelector('.nr-reader');
+  assert.equal(surface.getAttribute('data-paper'), 'sepia');
+  assert.equal(surface.style.getPropertyValue('--nr-paper'), '#f1e3c8');
+  assert.equal(surface.style.getPropertyValue('--nr-ink'), '#4a3b2a');
+
+  // Font family: kai switches the reading font stack.
+  const kai = [...popover().querySelectorAll('.nr-chip-btn')].find((element) => (element.textContent ?? '').includes('楷体'));
+  await click(kai);
+  await flush(40);
+  assert.ok(container.querySelector('.nr-reader').style.getPropertyValue('--nr-font-family').includes('KaiTi'));
+  await click(findButton('Aa'));
+  await flush(10);
+  assert.equal(popover(), null, 'settings popover did not close');
 });
 
 await step('the chapter catalog lists every chapter and jumps', async () => {
