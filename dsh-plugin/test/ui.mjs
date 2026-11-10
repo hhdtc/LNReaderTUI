@@ -81,13 +81,22 @@ const CHAPTERS = [
 ];
 
 function chapterBody(index) {
+  const text = [`第${index + 1}章 第一段`, '第二段文字', '第三段文字'];
   return {
     id: BOOK.id,
     bookTitle: BOOK.title,
     index,
     total: CHAPTERS.length,
     title: CHAPTERS[index].title,
-    paragraphs: [`第${index + 1}章 第一段`, '第二段文字', '第三段文字'],
+    paragraphs: text,
+    // Reading order including one illustration; the reader renders figures
+    // from these archive entries and keeps the text blocks around them.
+    blocks: [
+      { type: 'text', text: text[0] },
+      { type: 'image', src: 'OEBPS/images/img00001.jpg', alt: '' },
+      { type: 'text', text: text[1] },
+      { type: 'text', text: text[2] },
+    ],
     truncated: false,
     progress: BOOK.progress,
   };
@@ -284,6 +293,9 @@ await step('opening the book loads chapter text in a paged (non-scrolling) view'
   assert.ok((flow.getAttribute('style') ?? '').includes('column-width'), 'strip is not column-paged');
   assert.ok((flow.getAttribute('style') ?? '').includes('translate3d'), 'strip has no page translation');
   assert.equal(container.querySelector('.nr-reader-scroll'), null, 'the scrolling reader is gone');
+  const figure = container.querySelector('.nr-article figure img');
+  assert.ok(figure !== null, 'illustration block did not render');
+  assert.ok((figure.getAttribute('src') ?? '').includes('/books/abc123/image?path='), 'illustration is not served by the image route');
   assert.ok(text().includes('1 / 1'), `page indicator missing: ${text().slice(-120)}`);
   assert.ok(calls.some((entry) => entry.path === '/books/abc123/chapter/1'));
 });

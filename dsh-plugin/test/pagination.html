@@ -43,9 +43,19 @@
     const chapter = /^\/books\/harness\/chapter\/(\d+)$/.exec(path);
     if (chapter !== null) {
       const index = Number(chapter[1]);
+      // One illustration in reading order, so pagination is exercised with a
+      // replaced element in the column strip (a data URI keeps it local).
+      const blocks = PARAGRAPHS.map((text) => ({ type: 'text', text }));
+      blocks.splice(30, 0, {
+        type: 'image',
+        src: 'data:image/svg+xml;utf8,' + encodeURIComponent(
+          '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="380"><rect width="600" height="380" fill="#c9d7f2"/><text x="300" y="200" font-size="28" text-anchor="middle" fill="#33415c">illustration</text></svg>',
+        ),
+        alt: '',
+      });
       return body({
         id: BOOK.id, bookTitle: BOOK.title, index, total: 3,
-        title: CHAPTERS[index].title, paragraphs: PARAGRAPHS, truncated: false, progress: BOOK.progress,
+        title: CHAPTERS[index].title, paragraphs: PARAGRAPHS, blocks, truncated: false, progress: BOOK.progress,
       });
     }
     if (path.endsWith('/progress')) {
@@ -110,6 +120,11 @@
       }));
       await frame();
       await frame();
+      // Illustrations load asynchronously (eager, but still over the network
+      // stack) and the reader re-pages 140 ms after their load event: let that
+      // settle before measuring.
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      await frame();
 
       const viewport = container.querySelector('.nr-reader-viewport');
       const clip = container.querySelector('.nr-page-clip');
@@ -141,6 +156,12 @@
 
       // 1) The reading area never scrolls: no vertical overflow means no line is
       //    parked below the visible box.
+      // The illustration must have loaded and taken space inside a page.
+      const figure = article.querySelector('figure img');
+      report.illustration = figure === null ? null : Math.round(figure.getBoundingClientRect().height);
+      if (figure === null) return fail('the illustration block did not render');
+      if (!(report.illustration > 40)) return fail(`the illustration did not load (${report.illustration}px tall)`);
+
       const verticalOverflow = viewport.scrollHeight - viewport.clientHeight;
       report.verticalOverflow = verticalOverflow;
       if (verticalOverflow > 0) return fail(`viewport overflows vertically by ${verticalOverflow}px`);

@@ -10,7 +10,7 @@
  */
 
 import { stat } from 'node:fs/promises';
-import { readBookFile } from './book.js';
+import { readBookCover, readBookFile, readBookImage } from './book.js';
 import { createCli } from './cli.js';
 import {
   bookFilePath,
@@ -91,6 +91,11 @@ export function createNovelReader(options) {
     return { book, parsed, path };
   }
 
+  const binaryRoutes = [
+    ['GET', /^\/books\/([^/]+)\/image$/, (match, url) => bookImage(decodeURIComponent(match[1]), url.searchParams.get('path') ?? '')],
+    ['GET', /^\/books\/([^/]+)\/cover$/, (match) => bookCover(decodeURIComponent(match[1]))],
+  ];
+
   const routes = [
     ['GET', /^\/status$/, () => status()],
     ['GET', /^\/books$/, () => books()],
@@ -149,7 +154,7 @@ export function createNovelReader(options) {
   }
 
   async function chapter(id, index) {
-    const { book, parsed } = await loadLibraryBook(id);
+    const { book, parsed, path } = await loadLibraryBook(id);
     if (!Number.isInteger(index) || index < 0 || index >= parsed.chapters.length) {
       const error = new Error(`chapter out of range: ${index}`);
       error.code = 'CHAPTER_NOT_FOUND';
@@ -181,9 +186,60 @@ export function createNovelReader(options) {
       total: parsed.chapters.length,
       title: entry.title,
       paragraphs,
+      // Reading order including illustration blocks; `paragraphs` stays the
+      // text-only view (the terminal reader's shape) for compatibility.
+      blocks: blocksOf(entry, path, truncated),
       truncated,
       progress: book.progress ?? null,
     };
+  }
+
+  /**
+   * Blocks of one chapter with only the images this book can actually serve.
+   * @param {any} entry - parsed chapter.
+   * @param {string} path - book file, so only .epub assets are offered.
+   * @param {boolean} truncated
+   */
+  function blocksOf(entry, path, truncated) {
+    const servesImages = String(path).toLowerCase().endsWith('.epub') && !truncated;
+    const blocks = Array.isArray(entry.blocks) ? entry.blocks : entry.paragraphs.map((text) => ({ type: 'text', text }));
+    if (!servesImages) return blocks.map((block) => (block.type === 'image' ? { type: 'text', text: '[图]' } : block));
+    return blocks;
+  }
+
+  /** Serve one illustration out of an EPUB. */
+  async function bookImage(id, name) {
+    const entry = String(name).trim();
+    if (entry === '' || entry.startsWith('/') || entry.split('/').includes('..')) {
+      const error = new Error('path must be a relative archive entry');
+      error.code = 'BAD_REQUEST';
+      throw error;
+    }
+    const { path } = await loadLibraryBook(id);
+    if (!String(path).toLowerCase().endsWith('.epub')) {
+      const error = new Error('this book has no illustrations');
+      error.code = 'IMAGE_NOT_FOUND';
+      throw error;
+    }
+    const asset = await readBookImage(path, entry);
+    if (asset === null) {
+      const error = new Error(`no such image: ${entry}`);
+      error.code = 'IMAGE_NOT_FOUND';
+      throw error;
+    }
+    return { ...asset, cacheSeconds: 3600 };
+  }
+
+  /** Serve a book's cover image. */
+  async function bookCover(id) {
+    const { path } = await loadLibraryBook(id);
+    const asset = String(path).toLowerCase().endsWith('.epub') ? await readBookCover(path) : null;
+    if (asset === null) {
+      const error = new Error('this book has no cover');
+      error.code = 'IMAGE_NOT_FOUND';
+      throw error;
+    }
+    return { ...asset, cacheSeconds: 3600 };
   }
 
   async function saveProgress(id, body) {
@@ -354,6 +410,24 @@ export function createNovelReader(options) {
       return;
     }
     const path = url.pathname.slice(API_PREFIX.length) || '/';
+    if (request.method === 'GET') {
+      for (const [method, pattern, run] of binaryRoutes) {
+        if (request.method !== method) continue;
+        const match = pattern.exec(path);
+        if (match === null) continue;
+        try {
+          const asset = await run(match, url);
+          response.statusCode = 200;
+          response.setHeader('content-type', asset.contentType);
+          response.setHeader('cache-control', `private, max-age=${asset.cacheSeconds ?? 600}`);
+          response.setHeader('content-length', String(asset.bytes.length));
+          response.end(asset.bytes);
+        } catch (error) {
+          sendJson(response, errorStatus(error), errorBody(error));
+        }
+        return;
+      }
+    }
     for (const [method, pattern, run] of routes) {
       if (request.method !== method) continue;
       const match = pattern.exec(path);
@@ -363,18 +437,7 @@ export function createNovelReader(options) {
         const payload = await run(match, body, url);
         sendJson(response, 200, payload);
       } catch (error) {
-        const code = typeof error?.code === 'string' ? error.code : 'INTERNAL';
-        const status = code === 'BAD_REQUEST' ? 400
-          : code === 'BOOK_NOT_FOUND' || code === 'CHAPTER_NOT_FOUND' || code === 'JOB_NOT_FOUND' ? 404
-            : code === 'BOOK_MISSING' || code === 'CLI_MISSING' ? 409
-              : code === 'CLI_FAILED' ? 502
-                : 500;
-        sendJson(response, status, {
-          error: {
-            code,
-            message: error instanceof Error ? error.message : String(error),
-          },
-        });
+        sendJson(response, errorStatus(error), errorBody(error));
       }
       return;
     }
@@ -455,6 +518,26 @@ async function readJsonBody(request) {
     error.code = 'BAD_REQUEST';
     throw error;
   }
+}
+
+/** HTTP status for one typed failure. */
+function errorStatus(error) {
+  const code = typeof error?.code === 'string' ? error.code : 'INTERNAL';
+  if (code === 'BAD_REQUEST') return 400;
+  if (code === 'BOOK_NOT_FOUND' || code === 'CHAPTER_NOT_FOUND' || code === 'JOB_NOT_FOUND' || code === 'IMAGE_NOT_FOUND') return 404;
+  if (code === 'BOOK_MISSING' || code === 'CLI_MISSING') return 409;
+  if (code === 'CLI_FAILED') return 502;
+  return 500;
+}
+
+/** JSON error body for one thrown failure. */
+function errorBody(error) {
+  return {
+    error: {
+      code: typeof error?.code === 'string' ? error.code : 'INTERNAL',
+      message: error instanceof Error ? error.message : String(error),
+    },
+  };
 }
 
 function sendJson(response, status, payload) {

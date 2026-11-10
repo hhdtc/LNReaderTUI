@@ -241,6 +241,10 @@ window.__ModuleLoader__.load({
       detail: (query) => request(`/detail?q=${encodeURIComponent(query)}`),
       download: (query) => request('/download', { method: 'POST', body: JSON.stringify({ query }) }),
       update: (query) => request('/update', { method: 'POST', body: JSON.stringify({ query }) }),
+      /** URL of one illustration read out of a book archive. */
+      imageUrl: (id, entry) => `${API_BASE}/books/${encodeURIComponent(id)}/image?path=${encodeURIComponent(entry)}`,
+      /** URL of a book's own cover image. */
+      coverUrl: (id) => `${API_BASE}/books/${encodeURIComponent(id)}/cover`,
       job: (id) => request(`/jobs/${encodeURIComponent(id)}`),
       cancelJob: (id) => request(`/jobs/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: '{}' }),
     };
@@ -327,6 +331,11 @@ window.__ModuleLoader__.load({
       .nr-article p{margin:0 0 1em;text-indent:2em;orphans:2;widows:2}
       .nr-article p:first-child{margin-top:0}
       .nr-article .nr-reader-end{text-align:center;text-indent:0;color:var(--dsw-alias-label-tertiary);margin-top:1.2em}
+      /* Illustrations: a figure owns its line box and never exceeds one page,
+         so a tall image cannot push a half line past the page edge. */
+      .nr-article figure{margin:1.1em 0;text-align:center;text-indent:0}
+      .nr-article figure img{display:block;max-width:100%;max-height:calc(var(--nr-page-height,540px) - 2.6em);
+        height:auto;margin:0 auto;border-radius:4px;object-fit:contain}
       .nr-page-hint{position:absolute;inset-inline-end:14px;bottom:8px;font-size:11px;color:var(--dsw-alias-label-tertiary);
         background:var(--dsw-alias-bg-base);padding:2px 6px;border-radius:6px;pointer-events:none;opacity:.85}
       .nr-page-hint[data-few] { opacity:0 }
@@ -572,7 +581,7 @@ window.__ModuleLoader__.load({
               }
             },
           }, [
-            h(Cover, { key: 'cover', book }),
+            h(Cover, { key: 'cover', book: withLocalCover(book) }),
             h('div', { key: 'main', className: 'nr-card-main' }, [
               h('div', { key: 'title', className: 'nr-card-title' }, book.title ?? ''),
               h('div', { key: 'meta', className: 'nr-card-meta' }, [
@@ -629,6 +638,25 @@ window.__ModuleLoader__.load({
           h('button', { key: 'download', type: 'button', className: 'nr-btn nr-btn--primary', onClick: () => onDownload(book) }, t('download')),
         ]),
       ]));
+    }
+
+    /**
+     * Resolve one chapter block's image source: archive entries are served by
+     * this plugin, while data/remote sources are used as written.
+     * @param {string} bookId
+     * @param {string} src
+     */
+    function imageSource(bookId, src) {
+      const value = String(src ?? '');
+      if (/^(?:data:|blob:|https?:)/i.test(value)) return value;
+      return api.imageUrl(bookId, value);
+    }
+
+    /** Prefer the book's own cover over a remote search thumbnail. */
+    function withLocalCover(book) {
+      const isEpub = String(book?.fileType ?? '').toLowerCase() === 'epub';
+      if (!isEpub || book?.present === false) return book;
+      return { ...book, coverUrl: api.coverUrl(book.id) };
     }
 
     function shorten(text, limit) {
@@ -757,6 +785,7 @@ window.__ModuleLoader__.load({
       const entryRef = React.useRef(undefined);
       const savedRef = React.useRef({ chapterIndex: -1, offset: -1 });
       const wheelAt = React.useRef(0);
+      const relayoutTimer = React.useRef(null);
 
       indexRef.current = index;
       chapterRef.current = chapter;
@@ -788,6 +817,8 @@ window.__ModuleLoader__.load({
         flow.style.columnGap = `${READER_GAP}px`;
         flow.style.left = '0px';
         flow.style.top = '0px';
+        // Illustrations size themselves against one page's height.
+        flow.style.setProperty('--nr-page-height', `${height}px`);
         // scrollWidth spans every column the browser laid out, so it counts pages.
         const pages = pagesInStrip(Math.max(width, flow.scrollWidth), width, READER_GAP);
         const fraction = Math.max(0, Math.min(1, fractionRef.current));
@@ -796,7 +827,13 @@ window.__ModuleLoader__.load({
         else if (mode === 'last') target = pages - 1;
         else target = Math.round(fraction * (pages - 1));
         target = Math.max(0, Math.min(pages - 1, target));
-        fractionRef.current = pages <= 1 ? 0 : target / (pages - 1);
+        // A re-page (resize, chapter panel, a late illustration) keeps the
+        // fraction the reader was aiming at; quantizing it here would let
+        // successive re-pages walk the position away. Only an explicit jump to
+        // the first/last page redefines it.
+        if (mode === 'first' || mode === 'last') {
+          fractionRef.current = pages <= 1 ? 0 : target / (pages - 1);
+        }
         setLayout({ width, height, pages });
         setCurrentPage(target);
       }, []);
@@ -879,6 +916,19 @@ window.__ModuleLoader__.load({
         fonts.ready.then(() => { if (live) relayout(undefined); }).catch(() => {});
         return () => { live = false; };
       }, [relayout]);
+
+      /** Re-page once late-loading illustrations have taken their space. */
+      const scheduleRelayout = React.useCallback(() => {
+        if (relayoutTimer.current !== null) clearTimeout(relayoutTimer.current);
+        relayoutTimer.current = setTimeout(() => {
+          relayoutTimer.current = null;
+          relayout(undefined);
+        }, 140);
+      }, [relayout]);
+
+      React.useEffect(() => () => {
+        if (relayoutTimer.current !== null) clearTimeout(relayoutTimer.current);
+      }, []);
 
       const turnChapter = React.useCallback((delta) => {
         const total = chapters?.length ?? 0;
@@ -1048,7 +1098,22 @@ window.__ModuleLoader__.load({
                 ref: flowRef,
                 style: { transform: `translate3d(-${Math.round(currentPage * (layout.width + READER_GAP))}px, 0, 0)` },
               }, h('article', { className: 'nr-article' }, [
-                ...chapter.paragraphs.map((paragraph, paragraphIndex) => h('p', { key: paragraphIndex }, paragraph)),
+                ...(chapter.blocks ?? chapter.paragraphs.map((text) => ({ type: 'text', text }))).map((block, blockIndex) => (
+                  block.type === 'image'
+                    ? h('figure', { key: blockIndex }, h('img', {
+                      key: 'img',
+                      src: imageSource(book.id, block.src),
+                      alt: block.alt ?? '',
+                      // Eager: a lazy image reports zero height until it enters
+                      // the viewport, which would make the page count drift as
+                      // the reader flips into it.
+                      loading: 'eager',
+                      decoding: 'async',
+                      onLoad: scheduleRelayout,
+                      onError: (event) => { event.currentTarget.style.display = 'none'; },
+                    }))
+                    : h('p', { key: blockIndex }, block.text)
+                )),
                 h('p', { key: 'end', className: 'nr-reader-end' }, `— ${t('readerEnd')} —`),
               ])))),
           chapter !== null && error === null

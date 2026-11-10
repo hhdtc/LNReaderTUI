@@ -20,7 +20,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { createNovelReader, novelIdOf } from '../lib/routes.js';
-import { readBookFile } from '../lib/book.js';
+import { readBookFile, readZipIndex } from '../lib/book.js';
 import { listBooks, resolveDataDir, setProgress } from '../lib/library.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -57,16 +57,29 @@ const realBooks = existsSync(sourceLibrary)
   : [];
 const sample = realBooks.find((book) => existsSync(join(sourceDir, book.file)));
 
+// One book that actually carries in-chapter illustrations, so the image route
+// is exercised against a real archive (cover-only books prove nothing).
+let illustrated;
+for (const book of realBooks) {
+  if (!String(book.file ?? '').toLowerCase().endsWith('.epub')) continue;
+  const path = join(sourceDir, book.file);
+  if (!existsSync(path)) continue;
+  if (book.id === sample?.id) continue;
+  const index = readZipIndex(await readFile(path));
+  if ([...index.keys()].some((name) => /(^|\/)images\/img[0-9]+\./.test(name))) {
+    illustrated = book;
+    break;
+  }
+}
+
 const tempRoot = await mkdtemp(join(tmpdir(), 'novel-reader-test-'));
 const dataDir = join(tempRoot, 'library');
 await mkdir(join(dataDir, 'books'), { recursive: true });
-if (sample !== undefined) {
-  await copyFile(join(sourceDir, sample.file), join(dataDir, sample.file));
+const seeded = [sample, illustrated].filter((book) => book !== undefined);
+if (seeded.length > 0) {
+  for (const book of seeded) await copyFile(join(sourceDir, book.file), join(dataDir, book.file));
   await writeFile(join(dataDir, 'library.json'), `${JSON.stringify({
-    books: [{
-      ...sample,
-      progress: { chapterIndex: 0, offset: 0, lastReadAt: '' },
-    }],
+    books: seeded.map((book) => ({ ...book, progress: { chapterIndex: 0, offset: 0, lastReadAt: '' } })),
   }, null, 2)}\n`);
 } else {
   console.log('note: no LNReaderTUI library on this machine; book tests run on a synthetic library');
@@ -124,7 +137,7 @@ await checkAsync('GET /books lists the shared library', async () => {
   assert.equal(status, 200);
   assert.equal(body.dataDir, dataDir);
   if (sample !== undefined) {
-    assert.equal(body.books.length, 1);
+    assert.equal(body.books.length, seeded.length);
     assert.equal(body.books[0].id, sample.id);
     assert.equal(body.books[0].present, true);
     assert.equal(body.books[0].summary.read, true);
@@ -187,11 +200,41 @@ if (sample !== undefined) {
     assert.equal(wrongMethod.status, 405);
   });
 
+  await checkAsync('illustration blocks are served as images', async () => {
+    if (illustrated === undefined) {
+      console.log('     note: no illustrated book on this machine; image route not exercised');
+      return;
+    }
+    // Find a chapter that carries an illustration block.
+    let entry = '';
+    for (let index = 0; index < 12 && entry === ''; index += 1) {
+      const { body } = await call(`/books/${illustrated.id}/chapter/${index}`);
+      const image = (body.blocks ?? []).find((block) => block.type === 'image');
+      if (image !== undefined) entry = image.src;
+    }
+    assert.notEqual(entry, '', 'expected an illustration in the first chapters');
+
+    const image = await fetch(`${origin}/books/${illustrated.id}/image?path=${encodeURIComponent(entry)}`);
+    assert.equal(image.status, 200);
+    assert.ok(String(image.headers.get('content-type')).startsWith('image/'), 'image content type');
+    assert.ok((await image.arrayBuffer()).byteLength > 1000, 'image bytes');
+
+    const cover = await fetch(`${origin}/books/${illustrated.id}/cover`);
+    assert.equal(cover.status, 200);
+    assert.ok(String(cover.headers.get('content-type')).startsWith('image/'), 'cover content type');
+
+    // A traversal attempt and a non-image entry are both refused.
+    const traversal = await fetch(`${origin}/books/${illustrated.id}/image?path=${encodeURIComponent('../content.opf')}`);
+    assert.equal(traversal.status, 400);
+    const notImage = await fetch(`${origin}/books/${illustrated.id}/image?path=${encodeURIComponent('META-INF/container.xml')}`);
+    assert.equal(notImage.status, 404);
+  });
+
   await checkAsync('POST delete removes the row and the file', async () => {
     const removed = await call(`/books/${sample.id}/delete`, { method: 'POST', body: '{}' });
     assert.equal(removed.status, 200);
     const { body } = await call('/books');
-    assert.equal(body.books.length, 0);
+    assert.equal(body.books.length, seeded.length - 1);
     assert.equal(existsSync(join(dataDir, sample.file)), false);
   });
 }

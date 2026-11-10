@@ -9,7 +9,7 @@
  * the fallback chapter title all change a chapter's identity.
  */
 
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { inflateRawSync } from 'node:zlib';
 
 // ── ZIP container ───────────────────────────────────────────────────────────
@@ -279,7 +279,12 @@ const BLOCK_ELEMENTS = new Set([
 export function extractChapter(source, name, index) {
   const document = parseMarkup(source);
   const paragraphs = [];
+  // Reading order for a renderer that can show images: text runs and figure
+  // blocks. `paragraphs` is a separate accumulation so it stays byte-identical
+  // to the terminal reader (where an image reads as "[图]" inside the run).
+  const blocks = [];
   let buffer = '';
+  let blockBuffer = '';
   let title = '';
   let foundTitle = false;
 
@@ -287,11 +292,15 @@ export function extractChapter(source, name, index) {
     const text = buffer.trim();
     if (text !== '') paragraphs.push(text);
     buffer = '';
+    const blockText = blockBuffer.trim();
+    if (blockText !== '') blocks.push({ type: 'text', text: blockText });
+    blockBuffer = '';
   };
 
   const walk = (node) => {
     if (typeof node === 'string') {
       buffer += node;
+      blockBuffer += node;
       return;
     }
     if (node.type === 'document') {
@@ -305,6 +314,14 @@ export function extractChapter(source, name, index) {
       return;
     }
     if (tag === 'img') {
+      const entry = resolveArchivePath(name, node.attrs?.src ?? '');
+      if (entry !== '') {
+        // The figure owns its own block; the text runs around it stay intact.
+        const blockText = blockBuffer.trim();
+        if (blockText !== '') blocks.push({ type: 'text', text: blockText });
+        blockBuffer = '';
+        blocks.push({ type: 'image', src: entry, alt: node.attrs?.alt ?? '' });
+      }
       buffer += '[图]';
       return;
     }
@@ -328,7 +345,37 @@ export function extractChapter(source, name, index) {
   walk(document);
   flush();
   if (title === '') title = fallbackChapterTitle(name, index);
-  return { title, paragraphs };
+  return { title, paragraphs, blocks };
+}
+
+/**
+ * Resolve an image reference from a chapter document to the archive entry that
+ * holds it: relative paths are joined against the chapter's own archive path,
+ * and absolute/data references (nothing this reader can serve from the book)
+ * resolve to an empty string.
+ * @param {string} chapterPath - archive path of the chapter document.
+ * @param {string} src - the `<img src>` value.
+ * @returns {string} normalized archive entry path, or "" when not resolvable.
+ */
+export function resolveArchivePath(chapterPath, src) {
+  const raw = String(src ?? '').trim();
+  if (raw === '' || /^(?:[a-z][a-z0-9+.-]*:)/i.test(raw) || raw.startsWith('//')) return '';
+  const clean = raw.split('#')[0].split('?')[0];
+  if (clean === '') return '';
+  const segments = clean.startsWith('/')
+    ? clean.slice(1).split('/')
+    : [...chapterPath.slice(0, chapterPath.lastIndexOf('/')).split('/'), ...clean.split('/')];
+  const out = [];
+  for (const segment of segments) {
+    if (segment === '' || segment === '.') continue;
+    if (segment === '..') {
+      if (out.length === 0) return '';
+      out.pop();
+      continue;
+    }
+    out.push(segment);
+  }
+  return out.join('/');
 }
 
 function fallbackChapterTitle(name, index) {
@@ -337,6 +384,119 @@ function fallbackChapterTitle(name, index) {
   const stem = dot < 0 ? base : base.slice(0, dot);
   if (stem !== '' && stem !== 'ch') return stem;
   return `Chapter ${index + 1}`;
+}
+
+// ── archive assets (illustrations, cover) ──────────────────────────────────
+
+/** Parsed archive indexes, keyed by book path and invalidated by mtime/size. */
+const archiveCache = new Map();
+/** Decoded assets kept hot: the biggest illustrations are a few hundred KB. */
+const assetCache = new Map();
+const ASSET_CACHE_BYTES = 48 * 1024 * 1024;
+let assetCacheBytes = 0;
+
+const MEDIA_TYPES = {
+  jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif',
+  webp: 'image/webp', bmp: 'image/bmp', svg: 'image/svg+xml', avif: 'image/avif',
+};
+
+/**
+ * Media type for an archive entry, or "" when it is not an image this reader
+ * serves.
+ * @param {string} entry
+ * @returns {string}
+ */
+export function imageMediaType(entry) {
+  const name = String(entry ?? '');
+  const dot = name.lastIndexOf('.');
+  if (dot < 0) return '';
+  return MEDIA_TYPES[name.slice(dot + 1).toLowerCase()] ?? '';
+}
+
+/**
+ * Read (and remember) one EPUB's container index: entry table, package path,
+ * and the cover image entry the package declares.
+ * @param {string} path
+ * @returns {Promise<{key: string, index: Map<string, any>, opfPath: string, cover: string}>}
+ */
+async function epubIndex(path) {
+  const info = await stat(path);
+  const key = `${info.mtimeMs}:${info.size}`;
+  const cached = archiveCache.get(path);
+  if (cached !== undefined && cached.key === key) return cached;
+
+  const buf = await readFile(path);
+  const index = readZipIndex(buf);
+  const readEntry = (name) => {
+    const entry = index.get(name);
+    return entry === undefined ? null : readZipEntry(buf, entry);
+  };
+  const containerBytes = readEntry('META-INF/container.xml');
+  let opfPath = '';
+  if (containerBytes !== null) {
+    const container = parseMarkup(containerBytes.toString('utf8'));
+    opfPath = findAll(container, 'rootfile')[0]?.attrs?.['full-path'] ?? '';
+  }
+  let cover = '';
+  if (opfPath !== '') {
+    const opfBytes = readEntry(opfPath);
+    if (opfBytes !== null) {
+      const opf = parseMarkup(opfBytes.toString('utf8'));
+      const manifest = findAll(opf, 'manifest')[0];
+      for (const item of findAll(manifest ?? opf, 'item')) {
+        if (!String(item.attrs?.properties ?? '').includes('cover-image')) continue;
+        cover = joinPath(opfPath.slice(0, opfPath.lastIndexOf('/')), String(item.attrs?.href ?? ''));
+        break;
+      }
+    }
+  }
+  const entry = { key, index, opfPath, cover };
+  archiveCache.set(path, entry);
+  while (archiveCache.size > 8) archiveCache.delete(archiveCache.keys().next().value);
+  return entry;
+}
+
+/**
+ * Read one image out of a book archive.
+ * @param {string} path - absolute path to the .epub.
+ * @param {string} entryName - normalized archive entry path.
+ * @returns {Promise<{bytes: Buffer, contentType: string} | null>} null when the
+ *   entry is absent or not an image.
+ */
+export async function readBookImage(path, entryName) {
+  const contentType = imageMediaType(entryName);
+  if (contentType === '') return null;
+  const cacheKey = `${path}|${entryName}`;
+  const cached = assetCache.get(cacheKey);
+  if (cached !== undefined) {
+    assetCache.delete(cacheKey);
+    assetCache.set(cacheKey, cached);
+    return cached;
+  }
+  const archive = await epubIndex(path);
+  const meta = archive.index.get(entryName);
+  if (meta === undefined) return null;
+  const buf = await readFile(path);
+  const value = { bytes: readZipEntry(buf, meta), contentType };
+  assetCache.set(cacheKey, value);
+  assetCacheBytes += value.bytes.length;
+  while (assetCacheBytes > ASSET_CACHE_BYTES && assetCache.size > 1) {
+    const oldest = assetCache.keys().next().value;
+    assetCacheBytes -= assetCache.get(oldest)?.bytes.length ?? 0;
+    assetCache.delete(oldest);
+  }
+  return value;
+}
+
+/**
+ * Read a book's declared cover image.
+ * @param {string} path - absolute path to the .epub.
+ * @returns {Promise<{bytes: Buffer, contentType: string} | null>}
+ */
+export async function readBookCover(path) {
+  const archive = await epubIndex(path);
+  if (archive.cover === '') return null;
+  return await readBookImage(path, archive.cover);
 }
 
 // ── EPUB / TXT ──────────────────────────────────────────────────────────────
